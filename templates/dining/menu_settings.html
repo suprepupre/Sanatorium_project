@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Настройки меню{% endblock %}
+
+{% block content %}
+<h2>Настройки чередования меню</h2>
+
+<p>
+  <a href="{% url 'diet_home' %}" class="btn-link">← В кабинет диетсестры</a>
+</p>
+
+{% if messages %}
+  {% for message in messages %}
+    <p style="color: green;"><strong>{{ message }}</strong></p>
+  {% endfor %}
+{% endif %}
+
+<div class="menu-select-panel">
+  <form method="post" class="menu-select-form">
+    {% csrf_token %}
+
+    <div class="field-row">
+      <label>Базовая дата начала Меню №1 (понедельник):</label>
+      <input type="date" name="base_date" value="{{ cfg.base_date|date:'Y-m-d' }}">
+      <div style="font-size:14px; color:#555; margin-top:6px;">
+        Используется только в режиме «Авто».
+      </div>
+    </div>
+
+    <div class="field-row">
+      <label>Какое меню использовать сейчас:</label>
+      <select name="forced_cycle">
+        <option value="" {% if not cfg.forced_cycle_id %}selected{% endif %}>Авто (чередование)</option>
+        {% for c in cycles %}
+          <option value="{{ c.id }}" {% if cfg.forced_cycle_id == c.id %}selected{% endif %}>
+            Принудительно: {{ c.name }}
+          </option>
+        {% endfor %}
+      </select>
+      <div style="font-size:14px; color:#b00020; margin-top:6px;">
+        Внимание: если выбрано «Принудительно», автоматическое чередование отключается.
+      </div>
+    </div>
+    <button type="submit">Сохранить</button>
+  </form>
+</div>
+{% endblock %}

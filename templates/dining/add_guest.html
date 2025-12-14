@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Новый отдыхающий{% endblock %}
+
+{% block content %}
+<h1>Добавить отдыхающего и посадить за стол</h1>
+
+<p><a href="{% url 'diet_home' %}" class="btn-link">← В кабинет диетсестры</a></p>
+
+<form method="post" class="staff-form">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Добавить</button>
+</form>
+{% endblock %}

@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Меню на день{% endblock %}
+
+{% block content %}
+<h1>
+    {{ daily_menu.cycle.name }},
+    {{ daily_menu.get_day_index_display }},
+    {{ daily_menu.get_diet_kind_display }}
+</h1>
+
+<p>
+    <a href="{% url 'daily_menu_select' %}" class="btn-link">← Выбрать другой день</a>
+    &nbsp;
+    <a href="{% url 'diet_home' %}" class="btn-link">В кабинет диетсестры</a>
+</p>
+
+<h2>Текущее меню</h2>
+<table class="menu-edit-table">
+    <tr>
+        <th>№</th>
+        <th>Приём пищи</th>
+        <th>Раздел</th>
+        <th>Блюдо</th>
+        <th>Общее</th>
+        <th>Действия</th>
+    </tr>
+    {% for item in items %}
+    <tr>
+        <form method="post" style="margin: 0;">
+            {% csrf_token %}
+            <input type="hidden" name="item_id" value="{{ item.id }}">
+
+            <td style="text-align: center; width: 40px;">
+                {{ forloop.counter }}
+            </td>
+
+            <td style="width: 140px;">
+                <select name="meal_time">
+                    {% for code, label in meal_choices %}
+                        <option value="{{ code }}" {% if code == item.meal_time %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </td>
+
+            <td style="width: 160px;">
+                <input type="text" name="category" value="{{ item.category }}">
+            </td>
+
+            <td>
+                <select name="dish_id">
+                    {% for d in dishes %}
+                        <option value="{{ d.id }}" {% if d.id == item.dish.id %}selected{% endif %}>
+                            {{ d.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </td>
+
+            <td style="text-align: center; width: 80px;">
+                <input type="checkbox" name="is_common" {% if item.is_common %}checked{% endif %}>
+            </td>
+
+            <td style="white-space: nowrap; width: 210px;">
+                <button type="submit" name="action" value="update">Сохранить</button>
+                <button type="submit" name="action" value="move_up">↑</button>
+                <button type="submit" name="action" value="move_down">↓</button>
+                <a href="{% url 'menu_item_delete' item.id %}">Удалить</a>
+            </td>
+        </form>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6">Меню пока пусто.</td></tr>
+    {% endfor %}
+</table>
+
+<div class="menu-add-panel">
+    <h2>Добавить блюдо в этот день</h2>
+
+    <form method="post" class="menu-add-form" id="menuAddForm">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add">
+
+        <div class="row">
+            <label for="meal_time_select">Приём пищи:</label>
+            {# используем form.meal_time, но даём ему id #}
+            {{ form.meal_time }}
+        </div>
+
+        <div class="row">
+            <label for="category_input">Раздел:</label>
+            <input type="text"
+                   name="category"
+                   id="category_input"
+                   value=""
+                   placeholder="Например: ЗАКУСКИ">
+        </div>
+
+        <div class="row">
+            <label for="dish_search">Блюдо:</label>
+
+            {# поле поиска по списку #}
+            <input type="search"
+                   id="dish_search"
+                   list="dish_list"
+                   placeholder="Начните вводить название блюда...">
+
+            {# datalist со всеми блюдами из select #}
+            <datalist id="dish_list"></datalist>
+
+            {# настоящий select Django (скрываем), он обязателен для form.is_valid() #}
+            <div style="display:none;">
+                {{ form.dish }}
+            </div>
+        </div>
+
+        <div class="checkbox-row">
+            {{ form.is_common }}
+            <label for="{{ form.is_common.id_for_label }}">Общее блюдо (выдаётся всем)</label>
+        </div>
+
+        <button type="submit">Добавить</button>
+    </form>
+</div>
+
+<script>
+(function () {
+    // 1) Подготовим datalist из скрытого select
+    const hiddenSelect = document.querySelector('#menuAddForm select[name="dish"]');
+    const datalist = document.getElementById('dish_list');
+    const searchInput = document.getElementById('dish_search');
+
+    if (!hiddenSelect || !datalist || !searchInput) return;
+
+    // наполняем datalist
+    datalist.innerHTML = '';
+    [...hiddenSelect.options].forEach(opt => {
+        if (!opt.value) return;
+        const o = document.createElement('option');
+        o.value = opt.textContent.trim();
+        o.dataset.value = opt.value;
+        datalist.appendChild(o);
+    });
+
+    // 2) При вводе/выборе из datalist — выставляем value у скрытого select
+    function syncDishToSelect() {
+        const text = searchInput.value.trim();
+        let foundValue = null;
+
+        [...hiddenSelect.options].forEach(opt => {
+            if (opt.textContent.trim() === text) {
+                foundValue = opt.value;
+            }
+        });
+
+        if (foundValue) {
+            hiddenSelect.value = foundValue;
+        } else {
+            // если не нашли точное совпадение — сбрасываем, чтобы не отправить мусор
+            hiddenSelect.value = '';
+        }
+    }
+
+    searchInput.addEventListener('change', syncDishToSelect);
+    searchInput.addEventListener('blur', syncDishToSelect);
+
+    // 3) При отправке формы — проверим что блюдо выбрано
+    document.getElementById('menuAddForm').addEventListener('submit', function(e){
+        syncDishToSelect();
+        if (!hiddenSelect.value) {
+            e.preventDefault();
+            alert('Выберите блюдо из списка (начните вводить название и выберите вариант).');
+            searchInput.focus();
+        }
+    });
+
+    // 4) Проставим id у meal_time (если Django не дал)
+    const mealSelect = document.querySelector('#menuAddForm select[name="meal_time"]');
+    if (mealSelect) mealSelect.id = 'meal_time_select';
+})();
+</script>
+{% endblock %}

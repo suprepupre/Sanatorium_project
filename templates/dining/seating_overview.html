@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Рассадка по столам{% endblock %}
+
+{% block content %}
+<h2>Рассадка по столам</h2>
+
+<p><a href="{% url 'diet_home' %}" class="btn-link">← В кабинет диетсестры</a></p>
+
+<form method="get" class="no-print" style="margin-bottom: 12px;">
+  <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+    <div style="font-weight:bold;">Дата:</div>
+    <div style="display:inline-flex; align-items:center; gap:8px;">
+      <input type="text" id="seating_date" name="date"
+             value="{{ target_date|date:'Y-m-d' }}"
+             style="width: 130px; text-align:center;">
+      <span>({{ target_date|date:"l" }})</span>
+    </div>
+  </div>
+</form>
+<script>
+(function () {
+    if (!window.flatpickr) return;
+
+    const input = document.getElementById('seating_date');
+    if (!input) return;
+    const form = input.closest('form');
+
+    flatpickr.localize(flatpickr.l10ns.ru);
+
+    flatpickr(input, {
+        altInput: true,
+        altFormat: "d.m.Y",   // показываем dd.mm.yyyy
+        dateFormat: "Y-m-d",  // отправляем YYYY-MM-DD
+        defaultDate: input.value || null,
+        allowInput: true,
+        onChange: function () {
+            if (form) form.submit();  // сразу применяем дату
+        }
+    });
+})();
+</script>
+
+
+<style>
+    .table-grid {
+        display: grid;
+        grid-template-columns: repeat(10, 1fr);
+        gap: 8px;
+        max-width: 900px;
+    }
+    .table-card {
+        padding: 10px;
+        border-radius: 8px;
+        text-decoration: none;
+        color: #000;
+        border: 1px solid #999;
+        background: #fff;
+        text-align: center;
+        font-weight: bold;
+    }
+    .free { background: #bff5c6; border-color: #1f8f2e; }
+    .partial { background: #ffe39a; border-color: #b77900; }
+    .full { background: #ffb3b3; border-color: #b00020; }
+    .small { font-weight: normal; font-size: 12px; margin-top: 4px; }
+</style>
+
+<div class="table-grid">
+    {% for t in tables %}
+        <a class="table-card {{ t.status }}"
+           href="{% url 'table_detail' t.number %}?date={{ target_date|date:'Y-m-d' }}">
+            Стол {{ t.number }}
+            <div class="small">{{ t.status_text }}</div>
+        </a>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Выбор меню{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 24px;
+            background: #f3f6ff;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            touch-action: manipulation;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px 32px 48px;
+        }
+        h1 {
+            font-size: 36px;
+            margin: 0 0 16px 0;
+            text-align: center;
+            color: #123b73;
+        }
+        h2 {
+            font-size: 30px;
+            margin: 16px 0 12px;
+            color: #123b73;
+        }
+        h3 {
+            font-size: 26px;
+            margin: 14px 0 10px;
+        }
+        h4 {
+            font-size: 22px;
+            margin: 10px 0 8px;
+        }
+        .panel {
+            background: #ffffff;
+            border-radius: 18px;
+            padding: 22px 24px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+            margin-bottom: 24px;
+        }
+        .btn-primary {
+            font-size: 24px;
+            padding: 14px 28px;
+            border-radius: 10px;
+            border: none;
+            background: #2d7ff9;
+            color: #fff;
+            cursor: pointer;
+            min-width: 260px;
+        }
+        .btn-primary:hover {
+            background: #1f66cc;
+        }
+        input[type="text"],
+        input[type="number"],
+        input[type="date"] {
+            font-size: 24px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        input[type="radio"] {
+            transform: scale(1.8);
+            margin-right: 14px;
+        }
+        label.option-large {
+            display: block;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            border-radius: 10px;
+            background: #eef2ff;
+        }
+        label.option-large:hover {
+            background: #dde4ff;
+        }
+        .category-block {
+            border-left: 5px solid #2d7ff9;
+            padding-left: 14px;
+            margin-bottom: 20px;
+        }
+        .small-link {
+            font-size: 20px;
+        }
+        .error {
+            color: #b00020;
+            margin-top: 8px;
+        }
+        .muted {
+            font-size: 20px;
+            color: #555;
+        }
+        input[type="text"],
+        input[type="number"],
+        input[type="date"] {
+            font-size: 24px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid #ccc;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        /* отдельный стиль специально для поля кода */
+        .code-input {
+            font-size: 32px;         /* крупнее шрифт */
+            padding: 14px 16px;      /* выше поле */
+            text-align: center;      /* цифры по центру */
+            letter-spacing: 4px;     /* чуть разнести цифры */
+        }
+        #keypad .key-btn {
+            font-size: 26px;
+            padding: 14px 0;
+            flex: 1;
+            border-radius: 10px;
+            border: none;
+            background: #dde4ff;
+        }
+        #keypad .key-btn:hover {
+            background: #c6d1ff;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Система питания санатория</h1>
+    {% block content %}{% endblock %}
+</div>
+</body>
+</html>

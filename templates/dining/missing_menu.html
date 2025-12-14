@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Не выбрали меню{% endblock %}
+
+{% block content %}
+<h2>Отдыхающие, не выбравшие меню</h2>
+
+<p><a href="{% url 'diet_home' %}" class="btn-link">← В кабинет диетсестры</a></p>
+
+{% if messages %}
+    {% for message in messages %}
+        <p style="color: green;">{{ message }}</p>
+    {% endfor %}
+{% endif %}
+
+<form method="get" class="staff-form" style="max-width: 400px; margin-bottom: 15px;">
+    <p>
+        <label for="date">Дата, на которую проверять:</label>
+        <span style="display:inline-flex; align-items:center; gap:8px; width:100%;">
+            <input type="text" class="js-datepicker" name="date" value="{{ some_date|date:'Y-m-d' }}">
+            <span>({{ target_date|date:"l" }})</span>
+        </span>
+    </p>
+</form>
+<script>
+(function() {
+    const input = document.querySelector('.staff-form .js-datepicker');
+    if (!input) return;
+    const form = input.closest('form');
+    input.addEventListener('change', function() {
+        if (form) form.submit();
+    });
+})();
+</script>
+
+{% if total_missing %}
+    <p>
+        <strong>
+            На дату {{ target_date|date:"d.m.Y" }} ({{ target_date|date:"l" }})
+            меню не выбрали {{ total_missing }} человек(а).
+        </strong>
+    </p>
+
+    <table class="dish-table" style="max-width: 600px;">
+        <tr>
+            <th>Вид диеты</th>
+            <th>Кол-во отдыхающих</th>
+            <th>Действие</th>
+        </tr>
+        {% for d in stats %}
+        <tr>
+            <td>{{ d.label }}</td>
+            <td style="text-align: center;">{{ d.count }}</td>
+            <td>
+                <a class="btn-link"
+                href="{% url 'missing_menu_fill' d.code %}?date={{ target_date|date:'Y-m-d' }}">
+                    Выбрать блюда и назначить всем
+                </a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h3>Подробный список отдыхающих без выбранного меню</h3>
+
+    {% for d in stats %}
+        <h4>{{ d.label }} — {{ d.count }} чел.</h4>
+        <table class="dish-table" style="max-width: 800px; margin-bottom: 15px;">
+            <tr>
+                <th>ФИО</th>
+                <th>Стол</th>
+                <th>Место</th>
+            </tr>
+            {% for e in d.entries %}
+            <tr>
+                <td>{{ e.guest.full_name }}</td>
+                <td style="text-align: center;">
+                    {% if e.table %}{{ e.table }}{% else %}-{% endif %}
+                </td>
+                <td style="text-align: center;">
+                    {% if e.place %}{{ e.place }}{% else %}-{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% endfor %}
+{% else %}
+    <p>На дату {{ target_date|date:"d.m.Y" }} все активные отдыхающие уже выбрали меню.</p>
+{% endif %}
+{% endblock %}

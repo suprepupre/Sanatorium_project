@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Назначить меню{% endblock %}
+
+{% block content %}
+<h2>Назначить меню тем, кто не выбрал</h2>
+
+<p>
+    <a href="{% url 'missing_menu' %}?date={{ target_date|date:'Y-m-d' }}" class="btn-link">← Назад</a>
+    &nbsp;
+    <a href="{% url 'diet_home' %}" class="btn-link">В кабинет диетсестры</a>
+</p>
+
+<p>
+    <strong>Дата:</strong> {{ target_date|date:"d.m.Y" }} ({{ target_date|date:"l" }})<br>
+    <strong>Вид диеты:</strong> {{ diet_label }}<br>
+    <strong>Не выбрали меню:</strong> {{ missing_count }} чел.
+</p>
+
+{% if error %}
+    <p style="color:#b00020;"><strong>{{ error }}</strong></p>
+{% endif %}
+
+{% if daily_menu and missing_count > 0 %}
+<form method="post" class="staff-form">
+    {% csrf_token %}
+
+    {% for meal in meal_blocks %}
+        <div style="margin: 12px 0; padding: 10px; background:#f3f6ff; border:1px solid #bfc4d1; border-radius:10px;">
+            <h3 style="margin:0 0 6px 0;">
+                {{ meal.label }}{% if meal.time %} ({{ meal.time }}){% endif %}
+            </h3>
+
+            {% for cat in meal.categories %}
+                {% if cat.category %}
+                    <div style="font-weight:bold; margin-top:8px;">{{ cat.category }}</div>
+                {% endif %}
+
+                {# выборные блюда #}
+                {% for item in cat.items %}
+                    {% if not item.is_common %}
+                        <label style="display:block; margin:4px 0;">
+                            <input type="radio" name="{{ cat.key }}" value="{{ item.id }}">
+                            {{ forloop.counter }}. {{ item.dish.name }}
+                        </label>
+                    {% endif %}
+                {% endfor %}
+
+                {# общие блюда #}
+                {% for item in cat.items %}
+                    {% if item.is_common %}
+                        <div style="margin-left:18px; color:#555;">
+                            {{ item.dish.name }} (выдаётся всем)
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            {% endfor %}
+        </div>
+    {% endfor %}
+
+    <button type="submit">Назначить выбранное меню всем ({{ missing_count }} чел.)</button>
+</form>
+{% elif missing_count == 0 %}
+<p>Все отдыхающие этого вида диеты уже выбрали меню на эту дату.</p>
+{% endif %}
+
+{% endblock %}

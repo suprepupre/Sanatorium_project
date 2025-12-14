@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Стол {{ table_number }}{% endblock %}
+
+{% block content %}
+<h2>Стол №{{ table_number }}</h2>
+
+<p>
+    <a href="{% url 'seating_overview' %}?date={{ target_date|date:'Y-m-d' }}" class="btn-link">
+        ← К рассадке
+    </a>
+    &nbsp;
+    <a href="{% url 'diet_home' %}" class="btn-link">В кабинет диетсестры</a>
+</p>
+
+<p>
+    Дата: <strong>{{ target_date|date:"d.m.Y" }} ({{ target_date|date:"l" }})</strong>
+</p>
+
+<table class="dish-table" style="max-width: 900px;">
+    <tr>
+        <th>Место</th>
+        <th>ФИО</th>
+        <th>Диета</th>
+        <th>До</th>
+        <th>Код</th>
+        <th></th>
+    </tr>
+    {% for p in places %}
+    <tr>
+        <td style="text-align:center;">{{ p.place }}</td>
+        {% if p.guest %}
+            <td>{{ p.guest.full_name }}</td>
+            <td style="text-align:center;">{{ p.guest.get_diet_kind_display }}</td>
+            <td style="text-align:center;">{{ p.guest.end_date|date:"d.m.Y" }}</td>
+            <td style="text-align:center;">{{ p.guest.access_code }}</td>
+            <td style="text-align:center;">
+                <a class="btn-link"
+                href="{% url 'move_guest' p.guest.id %}?date={{ target_date|date:'Y-m-d' }}">
+                    Пересадить
+                </a>
+            </td>
+        {% else %}
+            <td colspan="5">Свободно</td>
+        {% endif %}
+    </tr>
+    {% endfor %}
+</table>
+{% if messages %}
+  {% for message in messages %}
+    <p style="color: green;"><strong>{{ message }}</strong></p>
+  {% endfor %}
+{% endif %}
+
+<h3>Добавить отдыхающего на этот стол</h3>
+
+{% if free_places %}
+  <form method="post" class="staff-form" style="max-width: 700px;">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="add_guest">
+
+    {{ add_form.as_p }}
+
+    <button type="submit">Добавить</button>
+  </form>
+
+  <p class="muted">
+    Свободные места: {{ free_places|join:", " }}
+  </p>
+{% else %}
+  <p><strong>На выбранную дату свободных мест на этом столе нет.</strong></p>
+{% endif %}
+{% endblock %}

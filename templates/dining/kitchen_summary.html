@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% load dining_extras %}
+{% block title %}Отчёт для кухни{% endblock %}
+
+{% block content %}
+<div class="kitchen-top-panel no-print">
+    <div class="kitchen-top-inner">
+        <form method="get" class="kitchen-top-form">
+            <label>
+                Дата:
+                <span style="display:inline-flex; align-items:center; gap:8px;">
+                    <input type="text" class="js-datepicker" name="date" value="{{ selected_date|date:'Y-m-d' }}">
+                    <span>({{ selected_date|date:"l" }})</span>
+                </span>
+            </label>
+            <button type="button" onclick="window.print();">Распечатать</button>
+        </form>
+        <script>
+            (function() {
+                const input = document.querySelector('.kitchen-top-form .js-datepicker');
+                if (!input) return;
+                const form = input.closest('form');
+                input.addEventListener('change', function() {
+                    if (form) form.submit();
+                });
+            })();
+        </script>
+        <a href="{% url 'diet_home' %}" class="btn-link">← В кабинет диетсестры</a>
+    </div>
+    <hr>
+</div>
+
+<p>
+    Выбранная дата:
+    <strong>{{ selected_date|date:"d.m.Y" }} ({{ selected_date|date:"l" }})</strong>
+</p>
+
+{% if not dishes_summary %}
+    <p>На эту дату заказов нет.</p>
+{% else %}
+    <table class="kitchen-table">
+        <tr>
+            <th>Блюдо</th>
+            <th>Всего порций</th>
+            {% for code, label in meal_choices %}
+                <th>{{ label }}</th>
+            {% endfor %}
+        </tr>
+        {% for d in dishes_summary %}
+        <tr>
+            <td>{{ d.dish.name }}</td>
+            <td style="text-align:center;">{{ d.total }}</td>
+            {% for code, label in meal_choices %}
+                <td style="text-align:center;">
+                    {{ d.by_meal|get_item:code }}
+                </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </table>
+{% endif %}
+{% endblock %}

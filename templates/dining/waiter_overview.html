@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Раздача блюд официантом{% endblock %}
+
+{% block content %}
+<h2>Раздача блюд официантом</h2>
+
+<div class="waiter-panel">
+    <p>
+        <a href="{% url 'diet_home' %}" class="btn-link">← В кабинет диетсестры</a>
+    </p>
+
+    <form method="get" class="waiter-form">
+        <div class="field-row">
+            <label>
+                Дата:
+                <input type="date" name="date" value="{{ selected_date_str }}">
+            </label>
+
+            <label style="margin-left: 15px;">
+                Приём пищи:
+                <select name="meal_time">
+                    {% for code, label in meal_choices %}
+                        <option value="{{ code }}" {% if code == meal_time %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
+
+        <div class="field-row">
+            <label>
+                Фильтр по блюду:
+                <select name="dish" style="min-width: 260px;">
+                    <option value="">(все блюда)</option>
+                    {% for d in dish_choices %}
+                        <option value="{{ d.id }}" {% if d.id == selected_dish_id %}selected{% endif %}>
+                            {{ d.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
+
+        <div class="field-row">
+            <label>
+                Официант:
+                <select name="waiter">
+                    <option value="">(все официанты)</option>
+                    {% for num, r in waiter_ranges.items %}
+                        <option value="{{ num }}" {% if waiter_num == num %}selected{% endif %}>
+                            №{{ num }} (столы {{ r.0 }}–{{ r.1 }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
+
+        <div class="field-row">
+            <button type="submit">Показать</button>
+            <a href="{% url 'waiter_print' %}?date={{ selected_date_str }}{% if waiter_num %}&waiter={{ waiter_num }}{% endif %}"
+               class="btn-link"
+               style="margin-left: 10px;"
+               target="_blank">
+                Печатная версия по столам
+            </a>
+        </div>
+    </form>
+</div>
+
+{% if tables %}
+    <h3>На дату {{ selected_date|date:"d.m.Y" }} — {{ meal_label }}</h3>
+
+    {% for table_number, places in tables.items %}
+        <h4>Стол №{{ table_number }}</h4>
+        <table class="dish-table" style="margin-bottom: 15px;">
+            <tr>
+                <th>Место</th>
+                <th>Блюда</th>
+            </tr>
+            {% for place_number, dishes in places.items %}
+                <tr>
+                    <td>{{ place_number }}</td>
+                    <td>
+                        {% for d in dishes %}
+                            {{ d.name }}{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% endfor %}
+{% else %}
+    <p>На выбранную дату и приём пищи заказов нет.</p>
+{% endif %}
+{% endblock %}

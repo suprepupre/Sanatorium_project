@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Кабинет диетсестры{% endblock %}
+
+{% block content %}
+<div class="staff-home-panel">
+    <h2>Кабинет диетсестры</h2>
+
+    <ul class="staff-home-menu">
+    {% if False %}
+    <li>
+    <a href="{% url 'add_guest' %}">Добавить отдыхающего и посадить за стол</a>
+    </li>
+    {% endif %}
+    <li><a href="{% url 'seating_overview' %}">Рассадка по столам</a></li>
+    <li>
+        <a href="{% url 'dish_list' %}">Справочник блюд</a>
+    </li>
+    <li>
+        <a href="{% url 'daily_menu_select' %}">Редактировать меню по дням</a>
+    </li>
+    <li><a href="{% url 'menu_settings' %}">Настройки: какое меню сейчас (№1/№2)</a></li>
+    <li>
+        <a href="{% url 'guest_list' %}">
+            Список отдыхающих (поиск по ФИО)
+        </a>
+    </li>
+    <li>
+        <a href="{% url 'missing_menu' %}">
+            Те, кто не выбрали меню (автозаполнение)
+        </a>
+    </li>
+    <li>
+        <a href="{% url 'waiter_overview' %}">Раздача блюд (печать по столам)</a>
+    </li>
+    <li>
+        <a href="{% url 'kitchen_summary' %}">Отчёт для кухни (количество блюд)</a>
+    </li>
+
+
+    <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="logout-btn-big">Выйти из кабинета</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,143 @@
+{% extends "base_guest.html" %}
+{% block title %}Выбор меню{% endblock %}
+
+{% block content %}
+<div class="panel">
+    <h2>Здравствуйте, {{ guest.full_name }}</h2>
+
+    {% if seat %}
+        <p>Ваш стол: №{{ seat.table.number }}, место {{ seat.place_number }}</p>
+    {% endif %}
+    <p>Вы отдыхаете до: {{ guest.end_date|date:"d.m.Y" }}</p>
+    <p class="muted">
+    Ваш вид диеты:
+        {% if guest.diet_kind == "P" %}
+            <strong>П (пищевод)</strong>
+        {% elif guest.diet_kind == "BD" %}
+            <strong>БД (диабетическое)</strong>
+        {% else %}
+            <strong>Б (обычное)</strong>
+        {% endif %}
+    </p>
+</div>
+
+<div class="panel">
+    {% if target_date %}
+        <h2>Выбор меню на {{ target_date|date:"d.m.Y" }}</h2>
+    {% else %}
+        <h2>Выбор меню</h2>
+    {% endif %}
+
+    {% if no_window %}
+        <p class="error">
+            Сейчас нет доступного интервала для заполнения меню.
+            Пожалуйста, обратитесь к диетсестре.
+        </p>
+    {% elif stay_ended %}
+        <p class="error">
+            Ваше пребывание в санатории заканчивается
+            {{ guest.end_date|date:"d.m.Y" }}.
+            Заказывать меню на {{ target_date|date:"d.m.Y" }} нельзя.
+        </p>
+    {% else %}
+        <p class="muted">
+            Меню на {{ target_date|date:"d.m.Y" }} можно изменять
+            до 11:00 {{ cutoff_date|date:"d.m.Y" }}.
+        </p>
+
+        {% if not can_edit %}
+            <p class="error">
+                Время изменения меню на {{ target_date|date:"d.m.Y" }} истекло.
+                Если нужно что-то поменять, обратитесь к диетсестре.
+            </p>
+        {% endif %}
+    {% endif %}
+
+    {% if not no_window and not stay_ended %}
+        {% if not daily_menu %}
+            <p class="error">На эту дату меню ещё не настроено. Обратитесь к диетсестре.</p>
+        {% else %}
+            <form method="post">
+                {% csrf_token %}
+
+                {% for meal in meal_blocks %}
+                    <div class="category-block">
+                        <h3>
+                            {{ meal.label }}
+                            {% if meal.time %}
+                                ({{ meal.time }})
+                            {% endif %}
+                        </h3>
+
+                        {# Сначала – выборные блюда с нумерацией #}
+                        {% for cat in meal.categories %}
+                            {% if cat.category %}
+                                <h4>{{ cat.category }}</h4>
+                            {% endif %}
+
+                            {% for item in cat.items %}
+                                {% if not item.is_common %}
+                                    <label class="option-large">
+                                        <input type="radio"
+                                               name="{{ cat.key }}"
+                                               value="{{ item.id }}"
+                                               {% if cat.selected_id == item.id %}checked{% endif %}
+                                               {% if not can_edit %}disabled{% endif %}>
+
+                                        {{ forloop.counter }}. {{ item.dish.name }}
+
+                                        {% if item.dish.proteins or item.dish.fats or item.dish.carbs or item.dish.kcal or item.dish.output %}
+                                            <span class="muted" style="font-size: 18px;">
+                                                {% if item.dish.proteins or item.dish.fats or item.dish.carbs or item.dish.kcal %}
+                                                    (Б: {{ item.dish.proteins }} Ж: {{ item.dish.fats }}
+                                                     У: {{ item.dish.carbs }} Ккал: {{ item.dish.kcal }}
+                                                {% else %}
+                                                    (
+                                                {% endif %}
+                                                {% if item.dish.output %}
+                                                    ; Выход: {{ item.dish.output }} г
+                                                {% endif %}
+                                                )
+                                            </span>
+                                        {% endif %}
+                                    </label>
+                                {% endif %}
+                            {% endfor %}
+                        {% endfor %}
+
+                        {# Затем – общие блюда (без выбора и без номеров) #}
+                        {% for cat in meal.categories %}
+                            {% for item in cat.items %}
+                                {% if item.is_common %}
+                                    <div class="option-large" style="background:#f9f9f9;">
+                                        {{ item.dish.name }}
+                                        <span class="muted" style="font-size: 18px;">
+                                            (выдаётся всем)
+                                        </span>
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+
+                {% if can_edit %}
+                    <button type="submit" class="btn-primary">
+                        Сохранить выбор на день и выйти
+                    </button>
+                {% else %}
+                    <p class="muted" style="margin-top: 8px;">
+                        Ваш ранее сделанный выбор отображён выше.
+                    </p>
+                {% endif %}
+            </form>
+        {% endif %}
+    {% endif %}
+</div>
+
+<div class="panel">
+    <a href="{% url 'guest_logout' %}" class="small-link">
+        Сменить отдыхающего / выйти без сохранения
+    </a>
+</div>
+{% endblock %}

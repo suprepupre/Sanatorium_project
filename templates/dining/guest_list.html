@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Список отдыхающих{% endblock %}
+
+{% block content %}
+<h2>Список отдыхающих</h2>
+
+<p>
+  <a href="{% url 'diet_home' %}" class="btn-link">← В кабинет диетсестры</a>
+</p>
+
+<form method="get" class="staff-form" style="max-width: 700px; margin-bottom: 15px;">
+  <p>
+    <label>Дата:</label>
+    <span style="display:inline-flex; align-items:center; gap:8px; width:100%;">
+      <input type="text" class="js-datepicker" name="date" value="{{ some_date|date:'Y-m-d' }}">
+      <span>({{ target_date|date:"l" }})</span>
+    </span>
+  </p>
+
+  <p>
+    <label>Поиск по ФИО (часть фамилии/имени):</label>
+    <input type="text" name="q" value="{{ q }}" placeholder="Например: Иванов">
+  </p>
+
+  <button type="submit">Показать</button>
+</form>
+
+<p><strong>Найдено:</strong> {{ count }}</p>
+
+<table class="dish-table" style="max-width: 1100px;">
+  <tr>
+    <th>ФИО</th>
+    <th>Диета</th>
+    <th>Стол</th>
+    <th>Место</th>
+    <th>До</th>
+    <th>Код</th>
+    <th></th>
+  </tr>
+
+  {% for row in guests %}
+  <tr>
+    <td>{{ row.guest.full_name }}</td>
+    <td style="text-align:center;">{{ row.guest.get_diet_kind_display }}</td>
+    <td style="text-align:center;">{% if row.table %}{{ row.table }}{% else %}-{% endif %}</td>
+    <td style="text-align:center;">{% if row.place %}{{ row.place }}{% else %}-{% endif %}</td>
+    <td style="text-align:center;">{{ row.guest.end_date|date:"d.m.Y" }}</td>
+    <td style="text-align:center;">{{ row.guest.access_code }}</td>
+    <td style="text-align:center;">
+      <a class="btn-link"
+         href="{% url 'move_guest' row.guest.id %}?date={{ target_date|date:'Y-m-d' }}">
+        Пересадить
+      </a>
+    </td>
+  </tr>
+  {% empty %}
+  <tr>
+    <td colspan="7">Нет отдыхающих по заданным условиям.</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

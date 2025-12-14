@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Справочник блюд{% endblock %}
+
+{% block content %}
+<h1>Справочник блюд</h1>
+
+<p><a href="{% url 'diet_home' %}" class="btn-link">← В кабинет диетсестры</a></p>
+<p><a href="{% url 'dish_add' %}" class="btn-link">Добавить блюдо</a></p>
+
+<table class="dish-table">
+    <tr>
+        <th>Название</th>
+        <th>Тип</th>
+        <th>Б</th>
+        <th>Ж</th>
+        <th>У</th>
+        <th>Ккал</th>
+        <th>Выход, г</th>
+        <th></th>
+    </tr>
+    {% for dish in dishes %}
+    <tr>
+        <td>{{ dish.name }}</td>
+        <td>{% if dish.is_diet %}Диетическое{% else %}Обычное{% endif %}</td>
+        <td>{{ dish.proteins }}</td>
+        <td>{{ dish.fats }}</td>
+        <td>{{ dish.carbs }}</td>
+        <td>{{ dish.kcal }}</td>
+        <td>{{ dish.output }}</td>
+        <td><a href="{% url 'dish_edit' dish.id %}">Редактировать</a></td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="8">Блюд пока нет.</td></tr>
+    {% endfor %}
+</table>
+{% endblock %}

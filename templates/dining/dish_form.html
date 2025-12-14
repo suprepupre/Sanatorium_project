@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{% if dish %}Редактировать блюдо{% else %}Добавить блюдо{% endif %}{% endblock %}
+
+{% block content %}
+{% if dish %}
+    <h1>Редактировать блюдо: {{ dish.name }}</h1>
+{% else %}
+    <h1>Добавить блюдо</h1>
+{% endif %}
+
+<p><a href="{% url 'dish_list' %}" class="btn-link">← К списку блюд</a></p>
+
+
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Сохранить</button>
+</form>
+{% endblock %}

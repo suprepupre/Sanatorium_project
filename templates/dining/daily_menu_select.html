@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Редактировать меню по дням{% endblock %}
+
+{% block content %}
+<div class="menu-select-panel">
+    <h2>Редактировать меню по дням</h2>
+
+    <p>
+        <a href="{% url 'diet_home' %}" class="btn-link">← В кабинет диетсестры</a>
+    </p>
+
+    {% if error %}
+        <p style="color:#b00020;"><strong>{{ error }}</strong></p>
+    {% endif %}
+
+    <form method="post" class="menu-select-form">
+        {% csrf_token %}
+
+        <div class="field-row">
+            <label for="{{ form.date.id_for_label }}">{{ form.date.label }}</label>
+
+            <div style="display:flex; align-items:center; gap:10px;">
+                {{ form.date }}
+                <span id="weekdayLabel" style="font-size:16px; font-weight:bold;">
+                    ({{ selected_date|date:"l" }})
+                </span>
+            </div>
+        </div>
+
+        <script>
+        (function() {
+            const input = document.getElementById('{{ form.date.id_for_label }}');
+            const label = document.getElementById('weekdayLabel');
+
+            function capFirst(s) {
+                if (!s) return s;
+                return s.charAt(0).toUpperCase() + s.slice(1);
+            }
+
+            function updateWeekday() {
+                if (!input || !label || !input.value) return;
+
+                // input.value формата YYYY-MM-DD
+                const parts = input.value.split('-');
+                if (parts.length !== 3) return;
+
+                const y = parseInt(parts[0], 10);
+                const m = parseInt(parts[1], 10) - 1;
+                const d = parseInt(parts[2], 10);
+
+                const dt = new Date(y, m, d);
+                const weekday = new Intl.DateTimeFormat('ru-RU', { weekday: 'long' }).format(dt);
+
+                label.textContent = '(' + capFirst(weekday) + ')';
+            }
+
+            updateWeekday();
+            input.addEventListener('change', updateWeekday);
+        })();
+        </script>
+
+        <div class="field-row">
+            <label for="{{ form.diet_kind.id_for_label }}">{{ form.diet_kind.label }}</label>
+            {{ form.diet_kind }}
+        </div>
+
+        {% if cycle %}
+            <p style="font-size:16px; margin-top: 10px;">
+                <strong>День недели:</strong> {{ selected_date|date:"l" }}<br>
+                <strong>Активное меню:</strong> {{ cycle.name }}
+            </p>
+        {% endif %}
+
+        <button type="submit">Открыть меню</button>
+    </form>
+</div>
+{% endblock %}

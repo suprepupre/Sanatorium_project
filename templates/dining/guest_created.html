@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Гость добавлен{% endblock %}
+
+{% block content %}
+<h1>Отдыхающий добавлен</h1>
+
+<p><strong>ФИО:</strong> {{ guest.full_name }}</p>
+<p><strong>Дата выезда:</strong> {{ guest.end_date }}</p>
+<p><strong>Стол:</strong> №{{ table.number }}</p>
+<p><strong>Место:</strong> {{ place_number }}</p>
+
+<p><strong>Код доступа (пароль):</strong>
+    <span style="font-size: 1.5em;">{{ guest.access_code }}</span>
+</p>
+
+<p>Этот код можно выдать отдыхающему для входа в систему и выбора меню.</p>
+
+<p><a href="{% url 'add_guest' %}">Добавить следующего отдыхающего</a></p>
+<p><a href="{% url 'diet_home' %}">Вернуться на главную</a></p>
+{% endblock %}

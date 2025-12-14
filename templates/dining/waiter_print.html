@@ -1,0 +1,217 @@
+{% load dining_extras %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ru.js"></script>
+    <meta charset="UTF-8">
+    <title>Раздача — печать</title>
+    <style>
+    body {
+        font-family: sans-serif;
+        font-size: 14px;
+        margin: 10px;
+        font-weight: bold;          /* весь текст жирный */
+    }
+    h1 { font-size: 20px; margin-bottom: 4px; }
+    h2 { font-size: 18px; margin: 8px 0 4px; }
+    h3 { font-size: 16px; margin: 6px 0 4px; }
+
+    table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-bottom: 6px;
+        table-layout: fixed;
+    }
+    th, td {
+        border: 2px solid #000;
+        padding: 4px 6px;
+        font-size: 14px;
+        font-weight: bold;         /* заголовки и ячейки тоже жирные */
+    }
+    th {
+        text-align: center;
+    }
+
+    @media print {
+        .no-print { display: none; }
+    }
+
+    /* Верхняя панель управления */
+    .top-panel {
+        margin-bottom: 10px;
+    }
+    .top-panel-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+    .top-form {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .top-form label {
+        font-size: 14px;
+    }
+    .top-form input[type="date"],
+    .top-form input[type="number"],
+    .top-form select {
+        font-size: 14px;
+        padding: 2px 4px;
+        font-weight: normal;      /* чтобы в полях ввода не было слишком жирно */
+    }
+    .top-form button {
+        font-size: 14px;
+        padding: 4px 10px;
+        border-radius: 4px;
+        border: 1px solid #000;
+        background: #e0e0ff;
+        cursor: pointer;
+        font-weight: bold;
+    }
+    .top-form a.print-link {
+        font-size: 14px;
+        margin-left: 6px;
+    }
+
+    /* Кнопка в кабинет диетсестры */
+    .btn-link {
+        display: inline-block;
+        padding: 4px 10px;
+        background: #2d7ff9;
+        color: #fff;
+        text-decoration: none;
+        border-radius: 4px;
+        font-size: 14px;
+    }
+    .btn-link:hover {
+        background: #1f66cc;
+    }
+</style>
+</head>
+<body>
+
+<div class="no-print top-panel">
+    <div class="top-panel-inner">
+        <form method="get" class="top-form">
+            <label>
+                Дата:
+                <span style="display:inline-flex; align-items:center; gap:8px;">
+                    <input type="text" class="js-datepicker" name="date" value="{{ selected_date|date:'Y-m-d' }}">
+                    <span>({{ selected_date|date:"l" }})</span>
+                </span>
+            </label>
+
+            <label>
+                Официант:
+                <select name="waiter">
+                    <option value="">(все)</option>
+                    {% for num, r in waiter_ranges.items %}
+                        <option value="{{ num }}" {% if waiter_num == num %}selected{% endif %}>
+                            №{{ num }} (столы {{ r.0 }}–{{ r.1 }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label>
+                Столы с:
+                <input type="number" name="table_from" min="1" max="100"
+                       value="{{ table_from }}" style="width:60px;">
+            </label>
+            <label>
+                по:
+                <input type="number" name="table_to" min="1" max="100"
+                       value="{{ table_to }}" style="width:60px;">
+            </label>
+
+            <button type="submit">Показать</button>
+            <a href="#" class="print-link" onclick="window.print(); return false;">Распечатать</a>
+        </form>
+
+        <a href="{% url 'diet_home' %}" class="btn-link">← В кабинет диетсестры</a>
+    </div>
+    <hr>
+</div>
+
+{% if not pages %}
+    <p>На выбранную дату заказов нет.</p>
+{% endif %}
+
+{% for page in pages %}
+<div class="page{% if not forloop.last %} page-break{% endif %}">
+    <h1>Раздача блюд по столам</h1>
+    <p>
+        Дата: {{ selected_date|date:"d.m.Y" }} ({{ selected_date|date:"l" }})
+        {% if waiter_num %}
+            &nbsp;&nbsp; Официант №{{ waiter_num }}
+        {% endif %}
+        &nbsp;&nbsp; Столы: {{ table_from }}–{{ table_to }}
+    </p>
+
+    {% for t in page %}
+        <h2>Стол №{{ t.table_number }}</h2>
+
+        {% for code, label in meal_choices %}
+            {% with rows=t.meals|get_item:code %}
+                {% if rows %}
+                    <h3>{{ label }}</h3>
+                    <table>
+                        <colgroup>
+                            <col style="width:65%;">
+                            <col style="width:10%;">
+                            <col style="width:25%;">
+                        </colgroup>
+                        <tr>
+                            <th>Блюдо</th>
+                            <th>Кол-во</th>
+                            <th>Места</th>
+                        </tr>
+                        {% for row in rows %}
+                        <tr>
+                            <td>{{ row.dish.name }}</td>
+                            <td style="text-align: center;">{{ row.count }}</td>
+                            <td>
+                                {% for p in row.places %}
+                                    {{ p }}{% if not forloop.last %}, {% endif %}
+                                {% endfor %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                {% endif %}
+            {% endwith %}
+        {% endfor %}
+    {% endfor %}
+</div>
+{% endfor %}
+
+<script>
+(function () {
+  if (!window.flatpickr) return;
+  flatpickr.localize(flatpickr.l10ns.ru);
+
+  document.querySelectorAll('input.js-datepicker').forEach(function (el) {
+    var form = el.closest('form');  // берём форму, в которой находится поле даты
+
+    flatpickr(el, {
+      altInput: true,
+      altFormat: "d.m.Y",   // показываем дд.мм.гггг
+      dateFormat: "Y-m-d",  // отправляем YYYY-MM-DD
+      allowInput: true,
+      onChange: function () {
+        if (form) {
+          form.submit();    // сразу отправляем форму (как будто нажали "Показать")
+        }
+      }
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

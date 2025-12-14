@@ -1,0 +1,127 @@
+{% extends "base_guest.html" %}
+{% block title %}Вход отдыхающего{% endblock %}
+
+{% block content %}
+
+{# Сообщения "Ваш выбор сохранён" #}
+{% if messages %}
+    <div class="panel" style="background:#e6ffed; border:1px solid #9ad29a; margin-bottom:20px;">
+        {% for message in messages %}
+            <p style="font-size:22px; color:#155724; text-align:center;">
+                {{ message }}
+            </p>
+        {% endfor %}
+    </div>
+{% endif %}
+
+{% if menu_available %}
+    <div style="margin: 25px 0 25px; text-align: center;">
+        <div style="font-size:52px; font-weight:900; color:#155724; line-height:1.1;">
+            ЗАПОЛНИТЕ МЕНЮ НА
+        </div>
+        <div style="font-size:52px; font-weight:900; color:#155724; line-height:1.1; margin-top:6px;">
+            {{ menu_target_date|date:"d.m.Y" }} ({{ menu_target_date|date:"l" }})
+        </div>
+    </div>
+{% else %}
+    <div style="margin: 25px 0 25px; text-align: center;">
+        <div style="font-size:52px; font-weight:900; color:#b00020; line-height:1.1;">
+            НЕТ ДОСТУПНОГО МЕНЮ
+        </div>
+    </div>
+{% endif %}
+
+<div class="panel">
+    <p class="muted" style="text-align:center; font-size:22px; margin-top:0;">
+        Введите ваш код доступа, который вы получили у диетсестры.
+    </p>
+
+    <form method="post" id="guest-login-form" autocomplete="off">
+        {% csrf_token %}
+
+        <div style="display:flex; flex-direction:column; align-items:center;">
+            <label for="access_code" style="font-size:24px; font-weight:700; margin-bottom:6px;">
+                Код доступа
+            </label>
+
+            <input type="text"
+                   id="access_code"
+                   name="access_code"
+                   maxlength="10"
+                   inputmode="numeric"
+                   pattern="\d*"
+                   autocomplete="off"
+                   class="code-input"
+                   style="width: 420px; max-width: 90%; text-align:center;">
+        </div>
+
+        <div id="keypad" style="margin: 16px auto 0; width: 900px; max-width: 100%;">
+            <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                <button type="button" class="key-btn" data-digit="1">1</button>
+                <button type="button" class="key-btn" data-digit="2">2</button>
+                <button type="button" class="key-btn" data-digit="3">3</button>
+            </div>
+            <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                <button type="button" class="key-btn" data-digit="4">4</button>
+                <button type="button" class="key-btn" data-digit="5">5</button>
+                <button type="button" class="key-btn" data-digit="6">6</button>
+            </div>
+            <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                <button type="button" class="key-btn" data-digit="7">7</button>
+                <button type="button" class="key-btn" data-digit="8">8</button>
+                <button type="button" class="key-btn" data-digit="9">9</button>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button type="button" class="key-btn" data-action="clear">Стереть</button>
+                <button type="button" class="key-btn" data-digit="0">0</button>
+                <button type="button" class="key-btn" data-action="backspace">⌫</button>
+            </div>
+        </div>
+
+        <div style="display:flex; justify-content:center; margin-top:14px;">
+            <button type="submit" class="btn-primary">Продолжить</button>
+        </div>
+
+        {% if error %}
+            <p class="error" style="text-align:center;">{{ error }}</p>
+        {% endif %}
+    </form>
+</div>
+
+{# этот блок можно убрать на терминале, если вход сотрудникам там не нужен #}
+<div class="panel">
+    <h3>Для сотрудников</h3>
+    <p class="small-link">
+        <a href="{% url 'login' %}">Войти как диетсестра или официант</a>
+    </p>
+</div>
+
+<script>
+(function() {
+    const input = document.getElementById('access_code');
+    const buttons = document.querySelectorAll('#keypad .key-btn');
+
+    buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const digit = btn.dataset.digit;
+            const action = btn.dataset.action;
+
+            if (digit) {
+                if (input.value.length < input.maxLength) {
+                    input.value += digit;
+                }
+            } else if (action === 'backspace') {
+                input.value = input.value.slice(0, -1);
+            } else if (action === 'clear') {
+                input.value = '';
+            }
+        });
+    });
+
+    // автофокус на поле кода
+    if (input) {
+        input.focus();
+    }
+})();
+</script>
+{% endblock %}
