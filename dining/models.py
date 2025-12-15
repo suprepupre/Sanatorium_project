@@ -60,6 +60,28 @@ class Guest(models.Model):
         verbose_name="Вид диеты (П/Б/БД)",
     )
 
+    # Разрешённые приёмы пищи (True = разрешено)
+    breakfast_allowed = models.BooleanField(
+        default=True,
+        verbose_name="Завтрак",
+        help_text="Разрешить выбор завтрака"
+    )
+    lunch_allowed = models.BooleanField(
+        default=True,
+        verbose_name="Обед",
+        help_text="Разрешить выбор обеда"
+    )
+    snack_allowed = models.BooleanField(
+        default=True,
+        verbose_name="Полдник",
+        help_text="Разрешить выбор полдника"
+    )
+    dinner_allowed = models.BooleanField(
+        default=True,
+        verbose_name="Ужин",
+        help_text="Разрешить выбор ужина"
+    )
+    
     def __str__(self):
         return self.full_name
 

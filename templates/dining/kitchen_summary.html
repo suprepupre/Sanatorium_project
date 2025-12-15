@@ -9,21 +9,35 @@
             <label>
                 Дата:
                 <span style="display:inline-flex; align-items:center; gap:8px;">
-                    <input type="text" class="js-datepicker" name="date" value="{{ selected_date|date:'Y-m-d' }}">
+                    <input type="text" id="seating_date" name="date"
+       value="{{ selected_date|date:'Y-m-d' }}"
+       style="width: 130px; text-align:center;">
                     <span>({{ selected_date|date:"l" }})</span>
                 </span>
             </label>
             <button type="button" onclick="window.print();">Распечатать</button>
         </form>
         <script>
-            (function() {
-                const input = document.querySelector('.kitchen-top-form .js-datepicker');
-                if (!input) return;
-                const form = input.closest('form');
-                input.addEventListener('change', function() {
-                    if (form) form.submit();
-                });
-            })();
+        (function () {
+            if (!window.flatpickr) return;
+
+            const input = document.getElementById('seating_date');
+            if (!input) return;
+            const form = input.closest('form');
+
+            flatpickr.localize(flatpickr.l10ns.ru);
+
+            flatpickr(input, {
+                altInput: true,
+                altFormat: "d.m.Y",   // показываем dd.mm.yyyy
+                dateFormat: "Y-m-d",  // отправляем YYYY-MM-DD
+                defaultDate: input.value || null,
+                allowInput: true,
+                onChange: function () {
+                    if (form) form.submit();  // сразу применяем дату
+                }
+            });
+        })();
         </script>
         <a href="{% url 'diet_home' %}" class="btn-link">← В кабинет диетсестры</a>
     </div>

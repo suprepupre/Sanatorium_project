@@ -313,6 +313,11 @@ def table_detail_view(request, table_number: int):
                     end_date=end_date,
                     access_code=access_code,
                     diet_kind=diet_kind,
+                    # Разрешённые приёмы
+                    breakfast_allowed=form.cleaned_data.get("breakfast_allowed", True),
+                    lunch_allowed=form.cleaned_data.get("lunch_allowed", True),
+                    snack_allowed=form.cleaned_data.get("snack_allowed", True),
+                    dinner_allowed=form.cleaned_data.get("dinner_allowed", True),
                 )
 
                 SeatAssignment.objects.create(
@@ -438,6 +443,11 @@ def add_guest_view(request):
                     end_date=end_date,
                     access_code=access_code,
                     diet_kind=diet_kind,
+                    # Разрешённые приёмы
+                    breakfast_allowed=form.cleaned_data.get("breakfast_allowed", True),
+                    lunch_allowed=form.cleaned_data.get("lunch_allowed", True),
+                    snack_allowed=form.cleaned_data.get("snack_allowed", True),
+                    dinner_allowed=form.cleaned_data.get("dinner_allowed", True),
                 )
 
                 SeatAssignment.objects.create(
@@ -688,6 +698,9 @@ def guest_menu_view(request):
 
     # Определяем, для какой даты сейчас доступно меню
     target_date, window_start, window_end = get_active_menu_target(now)
+    # Проверяем, является ли эта дата последним днём пребывания
+    is_last_day = (guest.end_date == target_date)
+
 
     if not target_date:
         # нет активного окна выбора вообще
@@ -822,8 +835,44 @@ def guest_menu_view(request):
 
     # --- Структура для шаблона ---
 
+        # Определяем, какие приёмы разрешены и как они отображаются
+    meal_time_labels = {
+        "breakfast": "Завтрак",
+        "lunch": "Обед",
+        "snack": "Полдник",
+        "dinner": "Ужин",
+    }
+
+    if is_last_day:
+        # В последний день только завтрак (но если диетсестра сняла галку, то может быть пустым)
+        allowed_meal_times = ["breakfast"]
+    else:
+        # Обычная логика: разрешённые диетсестрой
+        allowed_meal_times = []
+        if guest.breakfast_allowed:
+            allowed_meal_times.append("breakfast")
+        if guest.lunch_allowed:
+            allowed_meal_times.append("lunch")
+        if guest.snack_allowed:
+            allowed_meal_times.append("snack")
+        if guest.dinner_allowed:
+            allowed_meal_times.append("dinner")
+
+    # Формируем список отображаемых названий
+    allowed_meals_display = [
+        meal_time_labels[time_code] for time_code in allowed_meal_times
+    ]
+
+    # Если в последний день гостю не разрешён ни один приём — покажем "Завтрак" как дефолт
+    if is_last_day and not allowed_meals_display:
+        allowed_meals_display = ["Завтрак"]
+
     meal_blocks = []
     for code, label in MEAL_CHOICES:
+        # 2. Пропускаем приёмы, которые гостю не разрешены
+        if code not in allowed_meal_times:
+            continue
+
         meal_categories = items_by_meal[code]
         if not meal_categories:
             continue
@@ -860,8 +909,11 @@ def guest_menu_view(request):
             "cutoff_date": cutoff_date,
             "can_edit": can_edit,
             "stay_ended": False,
+            "is_last_day": is_last_day,  
             "daily_menu": daily_menu,
             "meal_blocks": meal_blocks,
+            "allowed_meals_display": allowed_meals_display,  
+
         },
     )
 
@@ -1073,12 +1125,22 @@ def waiter_print_compact_view(request):
             for t_no in sorted(entry["tables"].keys()):
                 places = sorted(entry["tables"][t_no])
                 places_str = ",".join(str(p) for p in places)
-                table_parts.append(f"{t_no}({places_str})")
+                # Собираем данные о столах в список словарей
+            tables_data = []
+            for t_no in sorted(entry["tables"].keys()):
+                places = sorted(entry["tables"][t_no])
+                places_str = ",".join(str(p) for p in places)
+                tables_data.append({
+                    "number": t_no,
+                    "places": places,
+                    "formatted": f"{t_no}({places_str})"
+                })
 
             rows.append({
                 "dish_name": entry["dish"].name,
                 "total": entry["total"],
-                "tables_str": "; ".join(table_parts),
+                "tables_data": tables_data,  # Передаем структурированные данные
+                "tables_str": "; ".join([t["formatted"] for t in tables_data]),  # Оставляем для совместимости
             })
 
         meal_blocks.append({

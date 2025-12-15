@@ -24,6 +24,28 @@ class AddGuestForm(forms.Form):
     table_number = forms.IntegerField(label="Номер стола", min_value=1, max_value=80)
     place_number = forms.IntegerField(label="Номер места", min_value=1, max_value=4)
 
+        # Разрешённые приёмы пищи
+    breakfast_allowed = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="Завтрак"
+    )
+    lunch_allowed = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="Обед"
+    )
+    snack_allowed = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="Полдник"
+    )
+    dinner_allowed = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="Ужин"
+    )
+
     def clean(self):
         cleaned = super().clean()
         end = cleaned.get("end_date")
@@ -104,6 +126,28 @@ class AddGuestAtTableForm(forms.Form):
     place_number = forms.ChoiceField(
         label="Место",
         choices=[],
+    )
+
+        # Разрешённые приёмы пищи
+    breakfast_allowed = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="Завтрак"
+    )
+    lunch_allowed = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="Обед"
+    )
+    snack_allowed = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="Полдник"
+    )
+    dinner_allowed = forms.BooleanField(
+        required=False,
+        initial=True,
+        label="Ужин"
     )
 
     def __init__(self, *args, free_places=None, start_date=None, **kwargs):

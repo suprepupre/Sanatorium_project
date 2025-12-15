@@ -40,6 +40,11 @@
             Заказывать меню на {{ target_date|date:"d.m.Y" }} нельзя.
         </p>
     {% else %}
+        {% if is_last_day %}
+            <p style="font-size: 22px; color:#155724; text-align:center; font-weight:bold; margin: 15px 0;">
+                Сегодня ваш последний день в санатории. Доступен только {{ allowed_meals_display|join:", " }}.
+            </p>
+        {% endif %}
         <p class="muted">
             Меню на {{ target_date|date:"d.m.Y" }} можно изменять
             до 11:00 {{ cutoff_date|date:"d.m.Y" }}.
@@ -50,7 +55,11 @@
                 Время изменения меню на {{ target_date|date:"d.m.Y" }} истекло.
                 Если нужно что-то поменять, обратитесь к диетсестре.
             </p>
+
         {% endif %}
+
+
+        
     {% endif %}
 
     {% if not no_window and not stay_ended %}
