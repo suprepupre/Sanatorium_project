@@ -15,6 +15,8 @@ urlpatterns = [
     path("diet/missing/fill/<str:diet_kind>/", views.missing_menu_fill_view, name="missing_menu_fill"),
     path("diet/menu-settings/", views.menu_settings_view, name="menu_settings"),
     path("diet/guests/", views.guest_list_view, name="guest_list"),
+    path("diet/guests/<int:guest_id>/meals/", views.guest_meals_edit_view, name="guest_meals_edit"),
+
 
 
     # Справочник блюд

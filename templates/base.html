@@ -498,20 +498,7 @@
     <h1>Система питания санатория</h1>
     {% block content %}{% endblock %}
 </div>
-<script>
-(function () {
-  if (!window.flatpickr) return;
 
-  flatpickr.localize(flatpickr.l10ns.ru);
-
-  document.querySelectorAll('input.js-datepicker').forEach(function (el) {
-    flatpickr(el, {
-      dateFormat: "d.m.Y",     // именно дд.мм.гггг
-      allowInput: true,
-    });
-  });
-})();
-</script>
 <script>
 (function () {
   if (!window.flatpickr) return;

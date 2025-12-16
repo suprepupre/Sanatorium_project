@@ -1,6 +1,10 @@
 from django.contrib import admin
 from .models import Guest, DiningTable, SeatAssignment, Dish, MenuCycle, DailyMenu, MenuItem
 
+admin.site.site_header = "Администрирование санатория"
+admin.site.site_title = "Админка"
+admin.site.index_title = "Разделы"
+
 @admin.register(Guest)
 class GuestAdmin(admin.ModelAdmin):
     list_display = ("full_name", "start_date", "end_date", "access_code")

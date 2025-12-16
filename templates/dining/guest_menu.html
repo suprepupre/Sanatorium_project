@@ -40,10 +40,15 @@
             Заказывать меню на {{ target_date|date:"d.m.Y" }} нельзя.
         </p>
     {% else %}
-        {% if is_last_day %}
-            <p style="font-size: 22px; color:#155724; text-align:center; font-weight:bold; margin: 15px 0;">
-                Сегодня ваш последний день в санатории. Доступен только {{ allowed_meals_display|join:", " }}.
-            </p>
+        {% if is_last_day_menu %}
+            <div style="margin: 15px 0; padding: 12px; background: #fff3cd; border: 1px solid #daac25ff; border-radius: 8px; text-align: center;">
+                <p style="font-size: 20px; color:#856404; margin: 0; font-weight: bold;">
+                    Вы выбираете меню на {{ target_date|date:"d.m.Y" }} — это день вашего выезда.
+                </p>
+                <p style="font-size: 18px; color:#856404; margin: 6px 0 0;">
+                    Доступно: {{ allowed_meals_display|join:", " }}.
+                </p>
+            </div>
         {% endif %}
         <p class="muted">
             Меню на {{ target_date|date:"d.m.Y" }} можно изменять

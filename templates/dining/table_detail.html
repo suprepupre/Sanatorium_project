@@ -5,7 +5,7 @@
 <h2>Стол №{{ table_number }}</h2>
 
 <p>
-    <a href="{% url 'seating_overview' %}?date={{ target_date|date:'Y-m-d' }}" class="btn-link">
+    <a href="{% url 'seating_overview' %}" class="btn-link">
         ← К рассадке
     </a>
     &nbsp;
@@ -35,7 +35,7 @@
             <td style="text-align:center;">{{ p.guest.access_code }}</td>
             <td style="text-align:center;">
                 <a class="btn-link"
-                href="{% url 'move_guest' p.guest.id %}?date={{ target_date|date:'Y-m-d' }}">
+                href="{% url 'move_guest' p.guest.id %}">
                     Пересадить
                 </a>
             </td>
@@ -54,18 +54,107 @@
 <h3>Добавить отдыхающего на этот стол</h3>
 
 {% if free_places %}
-  <form method="post" class="staff-form" style="max-width: 700px;">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="add_guest">
+  <style>
+  .add-guest-grid .row {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 10px 12px;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .add-guest-grid label {
+    font-size: 16px;
+    font-weight: bold;
+    margin: 0;
+  }
+  .meal-perms {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+    padding: 10px 12px;
+    border: 1px solid #bfc4d1;
+    border-radius: 10px;
+    background: #f3f6ff;
+  }
+  .meal-perms .meal-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    margin: 0;
+  }
+  .meal-perms input[type="checkbox"] {
+    transform: scale(1.2);
+  }
+  .add-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 10px;
+  }
+  .add-actions .free-places {
+    font-size: 14px;
+    color: #555;
+  }
+</style>
 
-    {{ add_form.as_p }}
+<form method="post" class="staff-form add-guest-grid" style="max-width: 700px;">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="add_guest">
 
-    <button type="submit">Добавить</button>
+  {{ add_form.non_field_errors }}
+
+  <div class="row">
+    <label for="{{ add_form.full_name.id_for_label }}">{{ add_form.full_name.label }}</label>
+    <div>
+      {{ add_form.full_name }}
+      {{ add_form.full_name.errors }}
+    </div>
+  </div>
+
+  <div class="row">
+    <label for="{{ add_form.end_date.id_for_label }}">{{ add_form.end_date.label }}</label>
+    <div>
+      {{ add_form.end_date }}
+      {{ add_form.end_date.errors }}
+    </div>
+  </div>
+
+  <div class="row">
+    <label for="{{ add_form.diet_kind.id_for_label }}">{{ add_form.diet_kind.label }}</label>
+    <div>
+      {{ add_form.diet_kind }}
+      {{ add_form.diet_kind.errors }}
+    </div>
+  </div>
+
+  <div class="row">
+    <label for="{{ add_form.place_number.id_for_label }}">{{ add_form.place_number.label }}</label>
+    <div>
+      {{ add_form.place_number }}
+      {{ add_form.place_number.errors }}
+    </div>
+  </div>
+
+  <div class="row">
+    <label>Приёмы пищи</label>
+    <div class="meal-perms">
+      <label class="meal-check">{{ add_form.breakfast_allowed }} Завтрак</label>
+      <label class="meal-check">{{ add_form.lunch_allowed }} Обед</label>
+      <label class="meal-check">{{ add_form.dinner_allowed }} Ужин</label>
+    </div>
+    </div>
+
+    <div class="add-actions">
+      <button type="submit" class="btn-primary" style="font-size:18px; padding:8px 18px; min-width: auto;">
+        Добавить
+      </button>
+
+    </div>
   </form>
 
-  <p class="muted">
-    Свободные места: {{ free_places|join:", " }}
-  </p>
 {% else %}
   <p><strong>На выбранную дату свободных мест на этом столе нет.</strong></p>
 {% endif %}

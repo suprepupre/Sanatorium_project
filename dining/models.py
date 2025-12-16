@@ -16,16 +16,14 @@ DAY_OF_WEEK_CHOICES = [
 ]
 
 MEAL_TIMES = {
-    "breakfast": None,    # пока без времени
+    "breakfast": None,
     "lunch": "14:00",
-    "snack": "17:00",
     "dinner": "19:00",
 }
 
 MEAL_CHOICES = [
     ("breakfast", "Завтрак"),
     ("lunch", "Обед"),
-    ("snack", "Полдник"),
     ("dinner", "Ужин"),
 ]
 
@@ -41,7 +39,9 @@ class DiningTable(models.Model):
 
     def __str__(self):
         return f"Стол №{self.number}"
-
+    class Meta:
+        verbose_name = "Стол"
+        verbose_name_plural = "Столы"
 
 class Guest(models.Model):
     full_name = models.CharField(max_length=200, verbose_name="ФИО")
@@ -60,29 +60,37 @@ class Guest(models.Model):
         verbose_name="Вид диеты (П/Б/БД)",
     )
 
-    # Разрешённые приёмы пищи (True = разрешено)
+    # Разрешённые приёмы пищи (обычные дни)
     breakfast_allowed = models.BooleanField(
-        default=True,
-        verbose_name="Завтрак",
-        help_text="Разрешить выбор завтрака"
+        default=True, verbose_name="Завтрак", help_text="Разрешить выбор завтрака"
     )
     lunch_allowed = models.BooleanField(
-        default=True,
-        verbose_name="Обед",
-        help_text="Разрешить выбор обеда"
+        default=True, verbose_name="Обед", help_text="Разрешить выбор обеда"
     )
     snack_allowed = models.BooleanField(
-        default=True,
-        verbose_name="Полдник",
-        help_text="Разрешить выбор полдника"
+        default=False, verbose_name="Полдник", help_text="Разрешить выбор полдника"
     )
     dinner_allowed = models.BooleanField(
-        default=True,
-        verbose_name="Ужин",
-        help_text="Разрешить выбор ужина"
+        default=True, verbose_name="Ужин", help_text="Разрешить выбор ужина"
     )
-    
-    def __str__(self):
+
+    # --- НОВЫЕ ПОЛЯ ---
+    departure_lunch = models.BooleanField(
+        default=False,
+        verbose_name="Обед в день выезда (платный)",
+        help_text="Разрешить обед в последний день пребывания"
+    )
+    departure_dinner = models.BooleanField(
+        default=False,
+        verbose_name="Ужин в день выезда (платный)",
+        help_text="Разрешить ужин в последний день пребывания"
+    )
+
+    class Meta:
+        verbose_name = "Отдыхающий"
+        verbose_name_plural = "Отдыхающие"
+
+    def __str__(self):        
         return self.full_name
 
 
@@ -135,6 +143,10 @@ class Dish(models.Model):
         null=True, blank=True, verbose_name="Выход, г"
     )
 
+    class Meta:
+        verbose_name = "Блюдо"
+        verbose_name_plural = "Блюда"
+    
     def __str__(self):
         return self.name
 
@@ -145,6 +157,10 @@ class MenuCycle(models.Model):
 
     name = models.CharField(max_length=100, verbose_name="Название меню")
     days_count = models.PositiveSmallIntegerField(default=7, verbose_name="Дней в цикле")
+
+    class Meta:
+        verbose_name = "Цикл меню"
+        verbose_name_plural = "Циклы меню"
 
     def __str__(self):
         return self.name
@@ -171,6 +187,8 @@ class DailyMenu(models.Model):
 
     class Meta:
         unique_together = ("cycle", "day_index", "diet_kind")
+        verbose_name = "Меню на день"
+        verbose_name_plural = "Меню по дням"
 
     def __str__(self):
         return f"{self.cycle.name} — {self.get_day_index_display()} ({self.get_diet_kind_display()})"
@@ -202,9 +220,9 @@ class MenuItem(models.Model):
     )
 
     class Meta:
-        # сортируем по приёму пищи, по номеру порядка,
-        # а при одинаковом порядке — НОВЫЕ записи ВЫШЕ старых
         ordering = ["meal_time", "order_index", "-id"]
+        verbose_name = "Позиция меню"
+        verbose_name_plural = "Позиции меню"
 
     def __str__(self):
         return f"{self.get_meal_time_display()}: {self.dish.name}"
@@ -223,8 +241,10 @@ class MenuItem(models.Model):
     #)
     #created_at = models.DateTimeField(auto_now_add=True)
 
-    #class Meta:
+    # class Meta:
     #    unique_together = ("guest", "date", "meal_time")
+    #   verbose_name = "Заказ"
+    #    verbose_name_plural = "Заказы"
 
     #def __str__(self):
     #    return f"{self.guest} — {self.date} — {self.get_meal_time_display()}"
@@ -235,7 +255,9 @@ class MenuItem(models.Model):
 #        Order, on_delete=models.CASCADE, related_name="items", verbose_name="Заказ"
 #    )
 #    menu_item = models.ForeignKey(MenuItem, on_delete=models.PROTECT, verbose_name="Позиция меню")
-
+#    class Meta:
+#        verbose_name = "Позиция заказа"
+#        verbose_name_plural = "Позиции заказа"
 #    def __str__(self):
 #        return f"{self.order}: {self.menu_item.dish.name}"
     
@@ -256,6 +278,8 @@ class Order(models.Model):
 
     class Meta:
         unique_together = ("guest", "date", "meal_time")
+        verbose_name = "Заказ"
+        verbose_name_plural = "Заказы"
 
     def __str__(self):
         return f"{self.guest} — {self.date} — {self.get_meal_time_display()}"
@@ -273,6 +297,10 @@ class OrderItem(models.Model):
         on_delete=models.PROTECT,
         verbose_name="Позиция меню",
     )
+
+    class Meta:
+        verbose_name = "Позиция заказа"
+        verbose_name_plural = "Позиции заказа"
 
     def __str__(self):
         return f"{self.order}: {self.menu_item.dish.name}"
@@ -295,6 +323,10 @@ class MenuRotationConfig(models.Model):
         help_text="Если не задано — используется автоматическое чередование.",
     )
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Настройка чередования меню"
+        verbose_name_plural = "Настройки чередования меню"
 
     def __str__(self):
         return "Настройки чередования меню"

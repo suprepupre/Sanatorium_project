@@ -16,7 +16,7 @@
     <p>
         <label for="date">Дата, на которую проверять:</label>
         <span style="display:inline-flex; align-items:center; gap:8px; width:100%;">
-            <input type="text" class="js-datepicker" name="date" value="{{ some_date|date:'Y-m-d' }}">
+            <input type="text" class="js-datepicker" name="date" value="{{ target_date|date:'Y-m-d' }}">
             <span>({{ target_date|date:"l" }})</span>
         </span>
     </p>

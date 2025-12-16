@@ -4,15 +4,18 @@
   <meta charset="UTF-8">
   <title>Раздача — по блюдам</title>
   <style>
-    table { background-color: #cfbfbfff; /* или любой другой оттенок серого */ }
     body { font-family: sans-serif; font-size: 14px; margin: 10px; font-weight: bold; }
     h1 { font-size: 20px; margin: 0 0 6px 0; }
     h2 { font-size: 16px; margin: 12px 0 6px; }
     .muted { font-weight: normal; }
 
-    table { border-collapse: collapse; width: 100%; table-layout: fixed; margin-bottom: 10px; }
-    th, td { border: 2px solid #000; padding: 4px 6px; font-size: 14px; }
+    table { border-collapse: collapse; width: 100%; table-layout: fixed; margin-bottom: 8px; }
+    th, td { border: 2px solid #000; padding: 3px 5px; font-size: 14px; }
     th { text-align: center; }
+    
+    td:nth-child(2) { text-align: center; }          /* Кол-во по центру */
+    td:nth-child(3) { line-height: 1.2; }            /* Столы чуть плотнее */
+    td:nth-child(3) { white-space: normal; word-break: break-word; }
 
     @media print { .no-print { display: none; } }
 
@@ -22,7 +25,68 @@
     .top-form input, .top-form select { font-size: 14px; padding: 2px 4px; font-weight: normal; }
     .top-form button { font-size: 14px; padding: 4px 10px; border:1px solid #000; background:#e0e0ff; cursor:pointer; font-weight:bold; }
     .btn-link { display:inline-block; padding:4px 10px; background:#2d7ff9; color:#fff; text-decoration:none; border-radius:4px; font-size:14px; }
-  
+    /* чтобы фон печатался (обычно помогает) */
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+
+    /* зебра только для строк с данными (не шапка) */
+    table.waiter-table th {
+      background: #bfb5b5;
+    }
+
+    table.waiter-table tr:nth-child(n+2):nth-child(odd) td {
+      background: #f3f0f0;   /* светлее */
+    }
+
+    table.waiter-table tr:nth-child(n+2):nth-child(even) td {
+      background: #d9d2d2;   /* темнее */
+    }
+
+    /* колонка "Столы (места)" */
+    td.tables-cell{
+      line-height: 1.25;
+      white-space: normal;
+      word-break: break-word;
+    }
+
+    /* выделение номера стола */
+    .tbl-num{
+      display: inline-block;
+      font-weight: 900;
+      font-size: 18px;      /* было слишком крупно */
+      line-height: 1;
+      background: #fff;
+      border: 1px solid #000;  /* тоньше */
+      padding: 0 4px;          /* меньше */
+      border-radius: 3px;
+      margin-right: 2px;
+      }
+    /* чуть плотнее таблица в целом */
+    .waiter-table th, .waiter-table td {
+      padding: 2px 4px;      /* было крупнее */
+      font-size: 13px;       /* можно оставить 14, но так компактнее */
+      vertical-align: top;
+    }
+
+    /* Кол-во: меньше и уже */
+    .waiter-table th:nth-child(2),
+    .waiter-table td:nth-child(2),
+    .waiter-table td.qty {
+      text-align: center;
+      padding: 1px 2px;      /* сильнее ужимаем */
+      font-size: 12px;       /* меньше шрифт */
+      font-weight: 900;      /* чтобы всё равно читалось */
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Столы (места): плотнее и лучше переносы */
+    .waiter-table td.tables-cell {
+      font-size: 18px;       /* чуть меньше, чем в “Блюдо” */
+      line-height: 1.15;
+      white-space: normal;
+      word-break: break-word;
+    }
   </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -84,11 +148,11 @@
 
 {% for meal in meal_blocks %}
   <h2>{{ meal.meal_label }}</h2>
-  <table>
+  <table class="waiter-table">
     <colgroup>
-      <col style="width:45%;">
-      <col style="width:10%;">
-      <col style="width:45%;">
+      <col style="width:32%;">
+      <col style="width:6%;">
+      <col style="width:62%;">
     </colgroup>
     <tr>
       <th>Блюдо</th>
@@ -96,11 +160,11 @@
       <th>Столы (места)</th>
     </tr>
     {% for r in meal.rows %}
-      <tr>
-        <td>{{ r.dish_name }}</td>
-        <td style="text-align:center;">{{ r.total }}</td>
-        <td>{{ r.tables_str }}</td>
-      </tr>
+    <tr>
+      <td>{{ r.dish_name }}</td>
+      <td class="qty">{{ r.total }}</td>
+      <td class="tables-cell">{{ r.tables_str }}</td>
+    </tr>
     {% endfor %}
   </table>
 {% endfor %}
@@ -123,6 +187,26 @@
         }
       }
     });
+  });
+})();
+(function () {
+  // Оборачиваем "73(" или "1–10(" в <span class="tbl-num">...</span>(
+  // Формат строки не меняем, только визуально выделяем.
+  document.querySelectorAll('td.tables-cell').forEach(function (td) {
+    if (td.querySelector('.tbl-num')) return; // защита от повторной обработки
+
+    const txt = td.textContent || "";
+
+    // 1) добавим точки переноса после ";" чтобы строка лучше переносилась
+    // 2) увеличим номера столов (цифры перед скобкой)
+    let html = txt.replace(/;\s*/g, ';<wbr> ');
+
+    // число или диапазон (с дефисом/длинным тире) перед "("
+    html = html.replace(/(\d+(?:[–-]\d+)?)\s*\(/g, function (_, m) {
+      return '<span class="tbl-num">' + m + '</span>(';
+    });
+
+    td.innerHTML = html;
   });
 })();
 </script>

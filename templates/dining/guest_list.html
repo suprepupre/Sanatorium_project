@@ -12,7 +12,7 @@
   <p>
     <label>Дата:</label>
     <span style="display:inline-flex; align-items:center; gap:8px; width:100%;">
-      <input type="text" class="js-datepicker" name="date" value="{{ some_date|date:'Y-m-d' }}">
+      <input type="text" class="js-datepicker" name="date" value="{{ target_date|date:'Y-m-d' }}">
       <span>({{ target_date|date:"l" }})</span>
     </span>
   </p>
@@ -46,10 +46,16 @@
     <td style="text-align:center;">{% if row.place %}{{ row.place }}{% else %}-{% endif %}</td>
     <td style="text-align:center;">{{ row.guest.end_date|date:"d.m.Y" }}</td>
     <td style="text-align:center;">{{ row.guest.access_code }}</td>
-    <td style="text-align:center;">
+    <td style="text-align:center; white-space:nowrap;">
       <a class="btn-link"
-         href="{% url 'move_guest' row.guest.id %}?date={{ target_date|date:'Y-m-d' }}">
+        href="{% url 'move_guest' row.guest.id %}?date={{ target_date|date:'Y-m-d' }}">
         Пересадить
+      </a>
+
+      <a class="btn-link"
+        style="margin-left:6px;"
+        href="{% url 'guest_meals_edit' row.guest.id %}?next={{ request.get_full_path|urlencode }}">
+        Приёмы пищи
       </a>
     </td>
   </tr>

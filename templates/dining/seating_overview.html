@@ -6,17 +6,7 @@
 
 <p><a href="{% url 'diet_home' %}" class="btn-link">← В кабинет диетсестры</a></p>
 
-<form method="get" class="no-print" style="margin-bottom: 12px;">
-  <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-    <div style="font-weight:bold;">Дата:</div>
-    <div style="display:inline-flex; align-items:center; gap:8px;">
-      <input type="text" id="seating_date" name="date"
-             value="{{ target_date|date:'Y-m-d' }}"
-             style="width: 130px; text-align:center;">
-      <span>({{ target_date|date:"l" }})</span>
-    </div>
-  </div>
-</form>
+
 <script>
 (function () {
     if (!window.flatpickr) return;
@@ -67,7 +57,7 @@
 <div class="table-grid">
     {% for t in tables %}
         <a class="table-card {{ t.status }}"
-           href="{% url 'table_detail' t.number %}?date={{ target_date|date:'Y-m-d' }}">
+           href="{% url 'table_detail' t.number %}">
             Стол {{ t.number }}
             <div class="small">{{ t.status_text }}</div>
         </a>
