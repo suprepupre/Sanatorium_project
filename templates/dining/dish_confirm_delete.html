@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Удалить блюдо{% endblock %}
+
+{% block content %}
+<h1>Удалить блюдо</h1>
+
+<p><a href="{% url 'dish_list' %}" class="btn-link">← К списку блюд</a></p>
+
+<p>Вы действительно хотите удалить блюдо
+   <strong>{{ dish.name }}</strong>?</p>
+
+<p style="color:#b00020;">
+  Если блюдо используется в меню (есть позиции MenuItem),
+  удалить его не получится — сначала уберите это блюдо из всех дней меню.
+</p>
+
+<form method="post">
+  {% csrf_token %}
+  <button type="submit">Удалить</button>
+</form>
+{% endblock %}

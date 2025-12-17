@@ -123,6 +123,14 @@ class SeatAssignment(models.Model):
 
 class Dish(models.Model):
     """Справочник блюд"""
+    
+     # НОВОЕ ПОЛЕ:
+    short_name = models.CharField(
+        max_length=100, 
+        blank=True, 
+        verbose_name="Название для кухни/официантов",
+        help_text="Если заполнено, официанты и кухня будут видеть это название (сокращенное). Если пусто — полное."
+    )
 
     name = models.CharField(max_length=200, verbose_name="Название блюда")
     is_diet = models.BooleanField(default=False, verbose_name="Диетическое блюдо")

@@ -1,7 +1,10 @@
 import random
 import string
+import re   
 
-from django.db.models import Q
+from urllib.parse import urlencode
+
+from django.db.models import Q, Count
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.urls import reverse
@@ -11,6 +14,8 @@ from django.db import transaction
 from django.shortcuts import render, redirect, get_object_or_404
 from datetime import date, datetime, time, timedelta
 from functools import wraps
+from django.db.models.deletion import ProtectedError
+
 
 from .forms import (
     AddGuestForm,
@@ -20,6 +25,7 @@ from .forms import (
     GuestLoginForm,
     GuestMealsForm,
     AddGuestAtTableForm,
+    GuestDepartureForm,
 )
 
 from .models import (
@@ -50,7 +56,195 @@ WAITER_RANGES = {
 
 MAX_TABLE_NUMBER = 100
 
+CATEGORY_ORDER = {
+    "НАПИТКИ": 10,
+    "ЗАКУСКИ": 20,
+    "1-Е БЛЮДА": 30,
+    "1-е БЛЮДА": 30,       # на всякий случай
+    "ПЕРВЫЕ БЛЮДА": 30,
+    "2-Е БЛЮДА": 40,
+    "2-е БЛЮДА": 40,       # если где-то с маленькой буквой
+    "ВТОРЫЕ БЛЮДА": 40,
+    "ДОПОЛНИТЕЛЬНО": 50,
+}
+
+def category_sort_key(name: str) -> tuple[int, str]:
+    """
+    Ключ сортировки разделов (категорий) меню.
+    Сначала фиксированный порядок (НАПИТКИ, ЗАКУСКИ, 1-е, 2-е, ДОПОЛНИТЕЛЬНО),
+    затем по алфавиту.
+    """
+    norm = (name or "").strip()
+    return (CATEGORY_ORDER.get(norm.upper(), 100), norm)
+
+def common_word_prefix(names: list[str]) -> str:
+    """
+    Возвращает общий префикс по словам для списка названий.
+    Например:
+      ["Куры отварные, каша гречневая",
+       "Куры отварные, картофельное пюре"]
+    -> "Куры отварные,".
+
+    Если общий префикс слишком короткий (меньше 2 слов) — считаем,
+    что он не информативен, и возвращаем пустую строку.
+    """
+    if len(names) < 2:
+        return ""
+
+    # разбиваем на слова
+    split = [n.strip().split() for n in names if n.strip()]
+    if not split:
+        return ""
+
+    min_len = min(len(words) for words in split)
+    prefix_words = []
+
+    for i in range(min_len):
+        w = split[0][i]
+        if all(words[i] == w for words in split[1:]):
+            prefix_words.append(w)
+        else:
+            break
+
+    # требуем хотя бы 2 общих слова, иначе не обрезаем
+    if len(prefix_words) >= 2:
+        return " ".join(prefix_words)
+    return ""
+
 BASE_MENU_CYCLE_DATE = date(2025, 12, 8)  # ПОНЕДЕЛЬНИК, с которого началось Меню №1
+
+
+def allowed_meals_for_guest_on_date(guest: Guest, target_date: date) -> dict[str, bool]:
+    """
+    Возвращает какие приёмы пищи гостю РАЗРЕШЕНЫ на target_date.
+
+    В обычные дни:
+      breakfast_allowed / lunch_allowed / dinner_allowed
+
+    В день выезда (target_date == guest.end_date):
+      - завтрак: breakfast_allowed
+      - обед: departure_lunch
+      - ужин: departure_dinner
+
+    ВАЖНО: lunch_allowed/dinner_allowed в день выезда НЕ ограничивают платные,
+    иначе получится путаница. Решение: в выездной день смотрим только departure_*.
+    """
+    if target_date == guest.end_date:
+        return {
+            "breakfast": bool(guest.breakfast_allowed),
+            "lunch": bool(guest.departure_lunch),
+            "dinner": bool(guest.departure_dinner),
+        }
+
+    return {
+        "breakfast": bool(guest.breakfast_allowed),
+        "lunch": bool(guest.lunch_allowed),
+        "dinner": bool(guest.dinner_allowed),
+    }
+
+
+def get_daily_menu_for_date_and_diet(target_date: date, diet_kind: str) -> DailyMenu | None:
+    """Получаем дневное меню (DailyMenu) на дату и диету."""
+    cycle, day_index = get_cycle_and_day_for_date(target_date)
+    if not cycle:
+        return None
+    return DailyMenu.objects.filter(cycle=cycle, day_index=day_index, diet_kind=diet_kind).first()
+
+def build_meal_blocks_from_daily_menu(daily_menu: DailyMenu):
+    """
+    Строит структуру meal_blocks для работы и в missing_menu_view, и в missing_menu_fill_view.
+
+    Возвращает список:
+    [
+      {
+        "code": "breakfast",
+        "label": "Завтрак",
+        "time": "08:00" или None,
+        "categories": [
+            { "key": "breakfast_cat_0", "category": "НАПИТКИ", "items": [MenuItem,...] },
+            { "key": "breakfast_cat_1", "category": "ЗАКУСКИ", "items": [...] },
+            ...
+        ]
+      },
+      ...
+    ]
+    """
+    meal_blocks = []
+
+    for meal_code, meal_label in MEAL_CHOICES:
+        # Берём все позиции этого приёма пищи
+        items = list(
+            daily_menu.items
+            .filter(meal_time=meal_code)
+            .select_related("dish")
+            .order_by("order_index", "id")
+        )
+        if not items:
+            continue
+
+        # Группируем по category
+        cat_map: dict[str, list[MenuItem]] = {}
+        for it in items:
+            cat = it.category or ""
+            cat_map.setdefault(cat, []).append(it)
+
+        # Собираем категории в нужном порядке (НАПИТКИ, ЗАКУСКИ, 1-е, 2-е, ДОПОЛНИТЕЛЬНО)
+        categories = []
+        idx = 0
+        for cat_name, cat_items in sorted(
+            cat_map.items(), key=lambda kv: category_sort_key(kv[0])
+        ):
+            key = f"{meal_code}_cat_{idx}"
+            categories.append({
+                "key": key,
+                "category": cat_name,
+                "items": cat_items,
+            })
+            idx += 1
+
+        meal_blocks.append({
+            "code": meal_code,
+            "label": meal_label,
+            "time": MEAL_TIMES.get(meal_code),
+            "categories": categories,
+        })
+
+    return meal_blocks
+
+def required_keys_and_meals(meal_blocks):
+    """
+    Определяем:
+    - required_keys: какие radio-поля обязательны (где есть выборные блюда is_common=False)
+    - required_meals: какие meal_code вообще требуют заказа (есть хотя бы один is_common=False)
+    """
+    required_keys = set()
+    required_meals = set()
+
+    for meal in meal_blocks:
+        meal_code = meal["code"]
+        for cat in meal["categories"]:
+            if any(not it.is_common for it in cat["items"]):
+                required_keys.add(cat["key"])
+                required_meals.add(meal_code)
+
+    return required_keys, required_meals
+
+
+def orders_items_count_map_for_date(target_date: date, guests_qs):
+    """
+    Карта: (guest_id, meal_time) -> количество позиций в заказе (OrderItem).
+    Если заказ есть, но items=0 — считаем как 0 (то есть меню не выбрано).
+    """
+    m = {}
+    rows = (
+        Order.objects
+        .filter(date=target_date, guest__in=guests_qs)
+        .values("guest_id", "meal_time")
+        .annotate(cnt=Count("items"))
+    )
+    for r in rows:
+        m[(r["guest_id"], r["meal_time"])] = int(r["cnt"] or 0)
+    return m
 
 def get_cycle_and_day_for_date(target_date: date):
     """
@@ -314,10 +508,10 @@ def table_detail_view(request, table_number: int):
                     access_code=access_code,
                     diet_kind=diet_kind,
                     # Приёмы пищи
-                    breakfast_allowed=form.cleaned_data.get("breakfast_allowed", True),
-                    lunch_allowed=form.cleaned_data.get("lunch_allowed", True),
+                    breakfast_allowed=True,
+                    lunch_allowed=True,
                     snack_allowed=False,
-                    dinner_allowed=form.cleaned_data.get("dinner_allowed", True),
+                    dinner_allowed=True,
                     # Платный выезд
                     departure_lunch=form.cleaned_data.get("departure_lunch", False),
                     departure_dinner=form.cleaned_data.get("departure_dinner", False),
@@ -485,9 +679,34 @@ def add_guest_view(request):
 
 @login_required
 def dish_list_view(request):
-    dishes = Dish.objects.all().order_by("name")
-    return render(request, "dining/dish_list.html", {"dishes": dishes})
+    """
+    Справочник блюд с поиском по названию.
+    """
+    q = (request.GET.get("q") or "").strip()
 
+    dishes_qs = Dish.objects.all()
+
+    if q:
+        # Поиск без учёта регистра (для кириллицы в SQLite — через разные варианты)
+        q_clean = q.lower()
+        dishes_qs = dishes_qs.filter(
+            Q(name__contains=q_clean) |
+            Q(name__contains=q_clean.capitalize()) |
+            Q(name__contains=q_clean.upper())
+        )
+
+    dishes_qs = dishes_qs.order_by("name")
+    count = dishes_qs.count()
+
+    return render(
+        request,
+        "dining/dish_list.html",
+        {
+            "dishes": list(dishes_qs),
+            "q": q,
+            "count": count,
+        },
+    )
 
 @login_required
 def dish_create_view(request):
@@ -689,6 +908,50 @@ def dish_edit_view(request, dish_id):
         form = DishForm(instance=dish)
     return render(request, "dining/dish_form.html", {"form": form, "dish": dish})
 
+from django.db.models import Count  # вверху файла, рядом с Q
+
+# ...
+
+@login_required
+@transaction.atomic
+def dish_delete_view(request, dish_id):
+    """
+    Удаление блюда из справочника.
+
+    Удаляем:
+      - все OrderItem, которые ссылаются на позиции меню с этим блюдом;
+      - все MenuItem с этим блюдом;
+      - само блюдо;
+      - дополнительно чистим заказы без позиций (Order с 0 items).
+
+    ВНИМАНИЕ: после этого блюда не будет ни в текущем меню, ни в
+    уже сделанных заказах (история по этому блюду исчезнет).
+    """
+    dish = get_object_or_404(Dish, id=dish_id)
+
+    if request.method == "POST":
+        name = dish.name
+
+        # 1) Удаляем все позиции заказов с этим блюдом
+        OrderItem.objects.filter(menu_item__dish=dish).delete()
+
+        # 2) Удаляем все позиции меню с этим блюдом
+        MenuItem.objects.filter(dish=dish).delete()
+
+        # 3) Удаляем само блюдо
+        dish.delete()
+
+        # 4) Чистим заказы, в которых не осталось ни одной позиции
+        Order.objects.annotate(cnt=Count("items")).filter(cnt=0).delete()
+
+        messages.success(
+            request,
+            f"Блюдо «{name}» и все его позиции в меню/заказах удалены."
+        )
+        return redirect("dish_list")
+
+    return render(request, "dining/dish_confirm_delete.html", {"dish": dish})
+
 @login_required
 def menu_item_delete_view(request, item_id: int):
     item = get_object_or_404(MenuItem, id=item_id)
@@ -702,13 +965,10 @@ def guest_menu_view(request):
     seat = guest.seat_assignments.order_by("-start_date").first()
 
     now = timezone.localtime()
-    today = now.date()
 
-    # Определяем, для какой даты сейчас доступно меню
+    # Определяем, для какой даты сейчас можно выбирать меню
     target_date, window_start, window_end = get_active_menu_target(now)
-    # Проверяем, является ли эта дата последним днём пребывания
-    is_last_day = (guest.end_date == target_date)
-
+    is_last_day = (target_date is not None and guest.end_date == target_date)
 
     if not target_date:
         # нет активного окна выбора вообще
@@ -777,12 +1037,10 @@ def guest_menu_view(request):
         )
 
     # --- Группируем позиции меню по приёмам пищи и разделам ---
-
     items_by_meal = {code: {} for code, _ in MEAL_CHOICES}
     for item in daily_menu.items.select_related("dish"):
         if item.meal_time not in items_by_meal:
-            # например старый "snack" — просто игнорируем
-            continue
+            continue  # старые snack и т.п.
         meal_dict = items_by_meal[item.meal_time]
         category = item.category or ""
         if category not in meal_dict:
@@ -790,7 +1048,6 @@ def guest_menu_view(request):
         meal_dict[category].append(item)
 
     # --- Уже сохранённый выбор гостя на эту дату ---
-
     existing_orders = (
         Order.objects.filter(guest=guest, date=target_date)
         .prefetch_related("items__menu_item")
@@ -801,17 +1058,59 @@ def guest_menu_view(request):
             cat = oi.menu_item.category or ""
             selected_by_mealcat[(order.meal_time, cat)] = oi.menu_item_id
 
-    # --- POST: сохраняем ВЕСЬ ДЕНЬ и выходим ---
+    # --- Определяем, какие приёмы разрешены и их подписи ---
+    meal_time_labels = {
+        "breakfast": "завтрак",
+        "lunch": "обед",
+        "dinner": "ужин",
+    }
 
+    if is_last_day:
+        # День выезда: завтрак + платный обед/ужин (если куплены)
+        allowed_meal_times = []
+        if guest.breakfast_allowed:
+            allowed_meal_times.append("breakfast")
+        if guest.departure_lunch:
+            allowed_meal_times.append("lunch")
+        if guest.departure_dinner:
+            allowed_meal_times.append("dinner")
+    else:
+        # Обычные дни
+        allowed_meal_times = []
+        if guest.breakfast_allowed:
+            allowed_meal_times.append("breakfast")
+        if guest.lunch_allowed:
+            allowed_meal_times.append("lunch")
+        if guest.dinner_allowed:
+            allowed_meal_times.append("dinner")
+
+    form_error = None  # текст ошибки валидации выбора
+
+    # --- POST: сохраняем ВЕСЬ ДЕНЬ ---
     if request.method == "POST":
         if not can_edit:
             return redirect("guest_menu")
 
+        # Для каждого приёма пищи проверим, есть ли вообще выборные блюда
+        has_choice_for_meal = {}
         for meal_code, _label in MEAL_CHOICES:
             meal_categories = items_by_meal.get(meal_code, {})
-            selected_ids = []
+            has_choice_for_meal[meal_code] = any(
+                any(not it.is_common for it in items)
+                for items in meal_categories.values()
+            )
 
-            for idx, (category, items) in enumerate(meal_categories.items()):
+        per_meal_selected_ids: dict[str, list[int]] = {}
+        validation_errors = []
+
+        for meal_code, _label in MEAL_CHOICES:
+            meal_categories = items_by_meal.get(meal_code, {})
+            selected_ids: list[int] = []
+
+            # порядок категорий должен совпадать с тем, как мы их рисуем
+            for idx, (category, items) in enumerate(
+                sorted(meal_categories.items(), key=lambda kv: category_sort_key(kv[0]))
+            ):
                 field_name = f"{meal_code}_cat_{idx}"
                 value = request.POST.get(field_name)
                 if not value:
@@ -823,78 +1122,70 @@ def guest_menu_view(request):
                 if any(it.id == mid for it in items):
                     selected_ids.append(mid)
 
-            if selected_ids:
-                order, _ = Order.objects.get_or_create(
-                    guest=guest,
-                    date=target_date,
-                    meal_time=meal_code,
-                )
-                order.items.all().delete()
-                OrderItem.objects.bulk_create(
-                    [OrderItem(order=order, menu_item_id=mid) for mid in selected_ids]
-                )
-            else:
-                Order.objects.filter(
-                    guest=guest,
-                    date=target_date,
-                    meal_time=meal_code,
-                ).delete()
+            per_meal_selected_ids[meal_code] = selected_ids
 
-        # Автоматический выход гостя после сохранения
-        request.session.pop("guest_id", None)
-        return redirect("landing")
+            # Валидация: если приём пищи разрешён и в нём есть выборные блюда,
+            # то нужно выбрать хотя бы одно блюдо.
+            if (
+                meal_code in allowed_meal_times
+                and has_choice_for_meal.get(meal_code)
+                and not selected_ids
+            ):
+                validation_errors.append(
+                    f"Выберите хотя бы одно блюдо на {meal_time_labels.get(meal_code, meal_code)}."
+                )
+
+        if validation_errors:
+            # Не сохраняем, просто показываем ошибку
+            form_error = " ".join(validation_errors)
+        else:
+            # Сохраняем выбор
+            for meal_code, _label in MEAL_CHOICES:
+                selected_ids = per_meal_selected_ids.get(meal_code, [])
+                if selected_ids:
+                    order, _ = Order.objects.get_or_create(
+                        guest=guest,
+                        date=target_date,
+                        meal_time=meal_code,
+                    )
+                    order.items.all().delete()
+                    OrderItem.objects.bulk_create(
+                        [OrderItem(order=order, menu_item_id=mid) for mid in selected_ids]
+                    )
+                else:
+                    Order.objects.filter(
+                        guest=guest,
+                        date=target_date,
+                        meal_time=meal_code,
+                    ).delete()
+
+            # Автоматический выход гостя после сохранения
+            request.session.pop("guest_id", None)
+            return redirect("landing")
 
     # --- Структура для шаблона ---
 
-        # Определяем, какие приёмы разрешены и как они отображаются
-    meal_time_labels = {
-        "breakfast": "Завтрак",
-        "lunch": "Обед",
-        "snack": "Полдник",
-        "dinner": "Ужин",
-    }
-
-    if is_last_day:
-        # День выезда: только завтрак (если разрешен) + платные обед/ужин (если куплены)
-        allowed_meal_times = []
-        if guest.breakfast_allowed:
-            allowed_meal_times.append("breakfast")
-        if guest.departure_lunch and guest.lunch_allowed:
-            allowed_meal_times.append("lunch")
-        if guest.departure_dinner and guest.dinner_allowed:
-            allowed_meal_times.append("dinner")
-    else:
-        # Обычные дни: всё, что разрешено
-        allowed_meal_times = []
-        if guest.breakfast_allowed:
-            allowed_meal_times.append("breakfast")
-        if guest.lunch_allowed:
-            allowed_meal_times.append("lunch")
-        # snack_allowed пропускаем или добавляем, если нужно (у вас скрыт)
-        if guest.dinner_allowed:
-            allowed_meal_times.append("dinner")
-
-    # Формируем список отображаемых названий
     allowed_meals_display = [
-        meal_time_labels[time_code] for time_code in allowed_meal_times
+        meal_time_labels[code].capitalize() for code in allowed_meal_times
     ]
-
-    # Если в последний день гостю не разрешён ни один приём — покажем "Завтрак" как дефолт
     if is_last_day and not allowed_meals_display:
         allowed_meals_display = ["Завтрак"]
 
     meal_blocks = []
     for code, label in MEAL_CHOICES:
-        # 2. Пропускаем приёмы, которые гостю не разрешены
+        # Пропускаем запрещённые приёмы пищи
         if code not in allowed_meal_times:
             continue
 
-        meal_categories = items_by_meal[code]
+        meal_categories = items_by_meal.get(code, {})
         if not meal_categories:
             continue
 
         category_blocks = []
-        for idx, (category, items) in enumerate(meal_categories.items()):
+        # сортируем разделы (НАПИТКИ, ЗАКУСКИ, 1-е, 2-е, ДОПОЛНИТЕЛЬНО)
+        for idx, (category, items) in enumerate(
+            sorted(meal_categories.items(), key=lambda kv: category_sort_key(kv[0]))
+        ):
             field_name = f"{code}_cat_{idx}"
             selected_id = selected_by_mealcat.get((code, category))
             category_blocks.append(
@@ -903,17 +1194,20 @@ def guest_menu_view(request):
                     "category": category,
                     "items": items,
                     "selected_id": selected_id,
+                    # есть ли в этом разделе выборные (не is_common) блюда
+                    "has_choices": any(not it.is_common for it in items),
                 }
             )
 
-        meal_blocks.append(
-            {
-                "code": code,
-                "label": label,
-                "time": MEAL_TIMES.get(code),
-                "categories": category_blocks,
-            }
-        )
+        if category_blocks:
+            meal_blocks.append(
+                {
+                    "code": code,
+                    "label": label,
+                    "time": MEAL_TIMES.get(code),
+                    "categories": category_blocks,
+                }
+            )
 
     return render(
         request,
@@ -925,14 +1219,13 @@ def guest_menu_view(request):
             "cutoff_date": cutoff_date,
             "can_edit": can_edit,
             "stay_ended": False,
-            "is_last_day_menu": (target_date == guest.end_date),  # флаг "меню на день выезда"
+            "is_last_day_menu": (target_date == guest.end_date),
             "daily_menu": daily_menu,
             "meal_blocks": meal_blocks,
-            "allowed_meals_display": allowed_meals_display,  
-
+            "allowed_meals_display": allowed_meals_display,
+            "form_error": form_error,
         },
     )
-
 @login_required
 def waiter_overview_view(request):
     """
@@ -1039,6 +1332,203 @@ def waiter_overview_view(request):
 
 @login_required
 def waiter_print_compact_view(request):
+    """
+    Печать для официантов:
+    Структура: ПРИЁМ ПИЩИ -> РАЗДЕЛ (Категория) -> БЛЮДО (короткое имя) -> ИТОГО -> СТОЛЫ
+    """
+    cleanup_departed_guests()
+
+    today = date.today()
+    default_date = today + timedelta(days=1)
+
+    date_str = request.GET.get("date") or default_date.isoformat()
+    waiter_str = request.GET.get("waiter") or ""
+    table_from_str = request.GET.get("table_from") or ""
+    table_to_str = request.GET.get("table_to") or ""
+
+    try:
+        selected_date = date.fromisoformat(date_str)
+    except ValueError:
+        selected_date = default_date
+
+    waiter_num = None
+    if waiter_str:
+        try:
+            waiter_num = int(waiter_str)
+        except ValueError:
+            waiter_num = None
+
+    # Фильтр по столам
+    if waiter_num in WAITER_RANGES:
+        table_from, table_to = WAITER_RANGES[waiter_num]
+    else:
+        try:
+            table_from = int(table_from_str) if table_from_str else 1
+        except ValueError:
+            table_from = 1
+        try:
+            table_to = int(table_to_str) if table_to_str else MAX_TABLE_NUMBER
+        except ValueError:
+            table_to = MAX_TABLE_NUMBER
+
+    table_from = max(1, table_from)
+    table_to = min(MAX_TABLE_NUMBER, table_to)
+
+    # 1. Получаем все заказы
+    orders = (
+        Order.objects.filter(date=selected_date)
+        .select_related("guest")
+        .prefetch_related(
+            "items__menu_item__dish", 
+            "guest__seat_assignments__table"
+        )
+    )
+
+    # 2. Структура для агрегации:
+    # aggregated[meal_code][category_name][dish_id] = {
+    #    'dish': dish_obj,
+    #    'order_index': int (для сортировки внутри категории),
+    #    'total': int,
+    #    'tables': { table_num: [place_num, ...] }
+    # }
+    aggregated = {code: {} for code, _ in MEAL_CHOICES}
+
+    # Вспомогательный словарь для порядка категорий: { (meal, category): min_id }
+    # Мы будем сортировать категории по тому, как рано они встречаются в базе (приблизительно)
+    # или можно просто по алфавиту. Попробуем сохранять порядок добавления.
+    
+    for order in orders:
+        guest = order.guest
+        
+        # Определяем стол
+        seat = None
+        for s in guest.seat_assignments.all():
+            if s.start_date <= selected_date <= s.end_date:
+                seat = s
+                break
+        if not seat:
+            continue
+
+        table_no = seat.table.number
+        place_no = seat.place_number
+
+        # Фильтр столов
+        if not (table_from <= table_no <= table_to):
+            continue
+
+        meal_dict = aggregated.setdefault(order.meal_time, {})
+
+        for oi in order.items.all():
+            dish = oi.menu_item.dish
+            # Категория из MenuItem. Если нет - "Разное"
+            cat_name = oi.menu_item.category.strip() if oi.menu_item.category else "—"
+            
+            cat_dict = meal_dict.setdefault(cat_name, {})
+            
+            dish_entry = cat_dict.setdefault(dish.id, {
+                "dish": dish,
+                "order_index": oi.menu_item.order_index, # сохраняем порядок из меню
+                "total": 0,
+                "tables": {}
+            })
+
+            table_places = dish_entry["tables"].setdefault(table_no, set())
+            
+            # Увеличиваем счетчик, только если это место еще не посчитано для этого блюда
+            # (защита от дублей, если вдруг в базе сбой, хотя unique protect)
+            if place_no not in table_places:
+                table_places.add(place_no)
+                dish_entry["total"] += 1
+
+    # 3. Преобразуем в список для шаблона
+    # meal_blocks = [ { 'meal_label': ..., 'categories': [ { 'name': ..., 'dishes': [...] } ] } ]
+    
+    meal_blocks = []
+    
+    # Порядок категорий: ЗАКУСКИ, 1-е, 2-е... 
+    # Эвристика: сортируем категории по минимальному order_index входящих в них блюд
+    
+    for code, label in MEAL_CHOICES:
+        cats_data = aggregated.get(code, {})
+        if not cats_data:
+            continue
+
+        # Сортируем категории. 
+        # Чтобы "ЗАКУСКИ" были раньше "2-е БЛЮДА", найдем минимальный order_index в каждой категории
+        def get_cat_sort_key(cat_item):
+            name, dishes_map = cat_item
+            # берем минимальный order_index среди блюд этой категории
+            if not dishes_map: return 999
+            return min(d['order_index'] for d in dishes_map.values())
+
+        sorted_cats = sorted(cats_data.items(), key=get_cat_sort_key)
+        
+        categories_list = []
+        for cat_name, dishes_map in sorted_cats:
+            # Сортируем блюда внутри категории (по order_index, затем по имени)
+            sorted_dishes = sorted(
+                dishes_map.values(),
+                key=lambda x: (x["order_index"], x["dish"].name)
+            )
+
+            # Список полных названий (со скобками) для поиска общего префикса
+            full_names = [entry["dish"].name for entry in sorted_dishes]
+            prefix = common_word_prefix(full_names)
+
+            rows = []
+            for entry in sorted_dishes:
+                dish = entry["dish"]
+                base_name = dish.name  # показываем полное название, включая скобки
+
+                if prefix and base_name.startswith(prefix):
+                    # Отрезаем общий префикс
+                    display_name = base_name[len(prefix):].lstrip()
+                    # убираем ведущую запятую, если она сразу после префикса
+                    if display_name.startswith(","):
+                        display_name = display_name[1:].lstrip()
+                else:
+                    display_name = base_name
+
+                # Формируем строку столов: "1(1,2); 5(3)"
+                tables_data = []
+                for t_no in sorted(entry["tables"].keys()):
+                    places = sorted(entry["tables"][t_no])
+                    places_str = ",".join(str(p) for p in places)
+                    tables_data.append({
+                        "number": t_no,
+                        "formatted": f"{t_no}({places_str})",
+                    })
+
+                rows.append({
+                    "dish_name": display_name,
+                    "total": entry["total"],
+                    "tables_data": tables_data,
+                    "tables_str": "; ".join([t["formatted"] for t in tables_data]),
+                })
+
+            categories_list.append({
+                "name": cat_name,
+                "rows": rows,
+            })
+
+        meal_blocks.append({
+            "meal_code": code,
+            "meal_label": label,
+            "categories": categories_list,
+        })
+
+    return render(
+        request,
+        "dining/waiter_print_compact.html",
+        {
+            "selected_date": selected_date,
+            "waiter_num": waiter_num,
+            "waiter_ranges": WAITER_RANGES,
+            "table_from": table_from,
+            "table_to": table_to,
+            "meal_blocks": meal_blocks,
+        },
+    )
     """
     Компактная печать для официантов:
     ПРИЁМ ПИЩИ -> БЛЮДО -> КОЛ-ВО -> СТОЛЫ(места)
@@ -1279,6 +1769,167 @@ def kitchen_summary_view(request):
 @login_required
 def missing_menu_fill_view(request, diet_kind: str):
     """
+    Диетсестра выбирает блюда и назначает их всем гостям,
+    которые НЕ выбрали меню на дату, для конкретного вида диеты (P/B/BD).
+
+    КРИТИЧНОЕ ИЗМЕНЕНИЕ:
+    - в день выезда назначаем ТОЛЬКО те приёмы, которые разрешены (departure_*),
+      и не считаем отсутствующие запрещённые приёмы как "не выбрал".
+    - не удаляем все заказы гостя на дату: дополняем только недостающие meal_time.
+    """
+    cleanup_departed_guests()
+
+    diet_labels = dict(DIET_TYPE_CHOICES)
+    if diet_kind not in diet_labels:
+        return redirect("missing_menu")
+
+    date_str = request.GET.get("date")
+    if not date_str:
+        return redirect("missing_menu")
+    try:
+        target_date = date.fromisoformat(date_str)
+    except ValueError:
+        return redirect("missing_menu")
+
+    active_guests = (
+        Guest.objects.filter(
+            diet_kind=diet_kind,
+            start_date__lte=target_date,
+            end_date__gte=target_date,
+        )
+    )
+
+    daily_menu = get_daily_menu_for_date_and_diet(target_date, diet_kind)
+    if not daily_menu:
+        return render(request, "dining/missing_menu_fill.html", {
+            "target_date": target_date,
+            "diet_kind": diet_kind,
+            "diet_label": diet_labels.get(diet_kind, diet_kind),
+            "missing_count": 0,
+            "daily_menu": None,
+            "meal_blocks": [],
+            "error": "На эту дату нет настроенного меню для выбранного вида диеты.",
+        })
+
+    meal_blocks = build_meal_blocks_from_daily_menu(daily_menu)
+    required_keys, required_meals = required_keys_and_meals(meal_blocks)
+
+    # карта заказов: (guest_id, meal_time) -> count(OrderItem)
+    orders_map = orders_items_count_map_for_date(target_date, active_guests)
+
+    # кто "не выбрал" (по разрешённым и требующим выбора приёмам)
+    missing_guests = []
+    for g in active_guests:
+        allowed = allowed_meals_for_guest_on_date(g, target_date)
+
+        # если нет выборных блюд — нечего назначать
+        if not required_meals:
+            continue
+
+        is_missing = False
+        for meal_code in required_meals:
+            if not allowed.get(meal_code, False):
+                continue
+            if orders_map.get((g.id, meal_code), 0) <= 0:
+                is_missing = True
+                break
+
+        if is_missing:
+            missing_guests.append(g)
+
+    missing_count = len(missing_guests)
+
+    if request.method == "POST":
+        if missing_count == 0:
+            messages.warning(request, "Нет отдыхающих без выбора на эту дату.")
+            return redirect(f"{reverse('missing_menu')}?date={target_date.isoformat()}")
+
+        # 1) Валидация: если категория имеет выборные блюда — выбор обязателен
+        for k in required_keys:
+            if not request.POST.get(k):
+                return render(request, "dining/missing_menu_fill.html", {
+                    "target_date": target_date,
+                    "diet_kind": diet_kind,
+                    "diet_label": diet_labels.get(diet_kind, diet_kind),
+                    "missing_count": missing_count,
+                    "daily_menu": daily_menu,
+                    "meal_blocks": meal_blocks,
+                    "error": "Выберите блюда во всех разделах (где есть выбор).",
+                })
+
+        # 2) Соберём выбранные menu_item_id по приёмам пищи
+        selected_by_meal = {code: [] for code, _ in MEAL_CHOICES}
+
+        valid_for_key = {}
+        for meal in meal_blocks:
+            for cat in meal["categories"]:
+                ids = [it.id for it in cat["items"] if not it.is_common]  # общие нельзя выбирать
+                valid_for_key[cat["key"]] = set(ids)
+
+        for meal in meal_blocks:
+            meal_code = meal["code"]
+            for cat in meal["categories"]:
+                key = cat["key"]
+                val = request.POST.get(key)
+                if not val:
+                    continue
+                try:
+                    mid = int(val)
+                except ValueError:
+                    continue
+                if mid in valid_for_key.get(key, set()):
+                    selected_by_meal[meal_code].append(mid)
+
+        # если вообще ничего не выбрали — не делаем
+        if not any(selected_by_meal.values()):
+            messages.warning(request, "Вы не выбрали ни одного блюда. Ничего не назначено.")
+            return redirect(request.path + f"?date={target_date.isoformat()}")
+
+        # 3) Применяем ко всем, кто "не выбрал"
+        for g in missing_guests:
+            allowed = allowed_meals_for_guest_on_date(g, target_date)
+
+            for meal_code in required_meals:
+                if not allowed.get(meal_code, False):
+                    # в день выезда многие meal_time запрещены — пропускаем
+                    continue
+
+                ids = selected_by_meal.get(meal_code) or []
+                if not ids:
+                    continue
+
+                # если у гостя уже есть выбор по этому meal_time — не трогаем
+                if orders_map.get((g.id, meal_code), 0) > 0:
+                    continue
+
+                order, _ = Order.objects.get_or_create(
+                    guest=g,
+                    date=target_date,
+                    meal_time=meal_code,
+                )
+                order.items.all().delete()
+                OrderItem.objects.bulk_create(
+                    [OrderItem(order=order, menu_item_id=mid) for mid in ids]
+                )
+
+        messages.success(
+            request,
+            f"Назначено выбранное меню для {missing_count} чел. "
+            f"({diet_labels.get(diet_kind)}) на {target_date.strftime('%d.%m.%Y')}.",
+        )
+        return redirect(f"{reverse('missing_menu')}?date={target_date.isoformat()}")
+
+    return render(request, "dining/missing_menu_fill.html", {
+        "target_date": target_date,
+        "diet_kind": diet_kind,
+        "diet_label": diet_labels.get(diet_kind, diet_kind),
+        "missing_count": missing_count,
+        "daily_menu": daily_menu,
+        "meal_blocks": meal_blocks,
+        "error": None,
+    })
+
+    """
     Диетсестра выбирает блюда из меню на дату и назначает их всем гостям,
     которые НЕ выбрали меню на эту дату, для конкретного вида диеты (P/B/BD).
     """
@@ -1443,15 +2094,17 @@ def missing_menu_fill_view(request, diet_kind: str):
 def missing_menu_view(request):
     """
     Страница для диетсестры:
-    - показывает, сколько активных отдыхающих НЕ выбрали меню на выбранную дату,
-      по каждому виду диеты;
-    - (если есть POST-форма) позволяет автоматически назначить "стандартное меню"
-      (первое не-общее блюдо по каждому приёму) для выбранной диеты или для всех.
+    - показывает, кто НЕ выбрал меню на выбранную дату.
+
+    КРИТИЧНОЕ ИЗМЕНЕНИЕ:
+    - в день выезда гость может иметь право только на завтрак или на платный обед/ужин;
+      отсутствие "запрещённых" приёмов НЕ считается "не выбрал меню".
+    - считаем "не выбрал" только для тех meal_time, которые:
+        (а) разрешены гостю на эту дату
+        (б) имеют в меню выборные блюда (is_common=False)
     """
     cleanup_departed_guests()
-
     now = timezone.localtime()
-
 
     # дата из query string
     date_str = request.GET.get("date")
@@ -1465,26 +2118,54 @@ def missing_menu_view(request):
         t_date, _, _ = get_active_menu_target(now)
         target_date = t_date if t_date is not None else now.date() + timedelta(days=1)
 
-    # активные гости на дату
-    active_guests = Guest.objects.filter(
-        start_date__lte=target_date,
-        end_date__gte=target_date,
+    # активные гости на дату (берём сразу с посадками, чтобы меньше запросов)
+    active_guests = (
+        Guest.objects.filter(start_date__lte=target_date, end_date__gte=target_date)
+        .prefetch_related("seat_assignments__table")
     )
 
-    # кто уже имеет хоть один заказ на дату
-    guests_with_orders = set(
-        Order.objects.filter(date=target_date).values_list("guest_id", flat=True)
-    )
+    # карта заказов: (guest_id, meal_time) -> count(OrderItem)
+    orders_map = orders_items_count_map_for_date(target_date, active_guests)
 
-    # гости без заказов
-    missing_qs = active_guests.exclude(id__in=guests_with_orders)
+    # для каждой диеты: какие приёмы пищи реально "требуют выбора" (есть is_common=False)
+    required_meals_by_diet = {}
+    for diet_code, _label in DIET_TYPE_CHOICES:
+        dm = get_daily_menu_for_date_and_diet(target_date, diet_code)
+        if not dm:
+            required_meals_by_diet[diet_code] = set()
+            continue
+        meal_blocks = build_meal_blocks_from_daily_menu(dm)
+        _required_keys, required_meals = required_keys_and_meals(meal_blocks)
+        required_meals_by_diet[diet_code] = required_meals
 
-    # группируем по виду диеты
+    # считаем список "не выбрали"
+    missing_guests = []
+    for g in active_guests:
+        allowed = allowed_meals_for_guest_on_date(g, target_date)
+        required_meals = required_meals_by_diet.get(g.diet_kind, set())
+
+        # если на эту диету/дату нет выборных блюд — нечего выбирать => не считаем missing
+        if not required_meals:
+            continue
+
+        is_missing = False
+        for meal_code in required_meals:
+            if not allowed.get(meal_code, False):
+                continue
+            if orders_map.get((g.id, meal_code), 0) <= 0:
+                is_missing = True
+                break
+
+        if is_missing:
+            missing_guests.append(g)
+
+    # группируем missing по виду диеты
     by_diet = {code: [] for code, _ in DIET_TYPE_CHOICES}
-    for g in missing_qs:
+    for g in missing_guests:
         by_diet.setdefault(g.diet_kind, []).append(g)
 
-    # POST: автоматическое назначение стандартного меню (если ты это используешь)
+    # POST: автоматическое назначение стандартного меню (первое не-общее блюдо по meal_time),
+    # но только для разрешённых приёмов пищи и только для тех meal_time, где есть выборные блюда.
     if request.method == "POST":
         diet_to_fill = request.POST.get("diet_kind")  # 'P' / 'B' / 'BD' / 'all'
 
@@ -1493,42 +2174,49 @@ def missing_menu_view(request):
         else:
             diets = [diet_to_fill] if diet_to_fill else []
 
-        filled_guests = set()
+        filled_guest_ids = set()
 
         for diet_code in diets:
             guests_for_diet = by_diet.get(diet_code) or []
             if not guests_for_diet:
                 continue
 
-            cycle, day_index = get_cycle_and_day_for_date(target_date)
-            if not cycle:
+            dm = get_daily_menu_for_date_and_diet(target_date, diet_code)
+            if not dm:
                 continue
 
-            daily_menu = DailyMenu.objects.filter(
-                cycle=cycle,
-                day_index=day_index,
-                diet_kind=diet_code,
-            ).first()
-            if not daily_menu:
+            meal_blocks = build_meal_blocks_from_daily_menu(dm)
+            _required_keys, required_meals = required_keys_and_meals(meal_blocks)
+            if not required_meals:
                 continue
 
             # "стандартные" блюда: первое не-общее блюдо на каждый приём пищи
-            items_by_meal = {}
-            for code, _label in MEAL_CHOICES:
-                items = list(
-                    daily_menu.items.filter(meal_time=code, is_common=False)
+            default_item_by_meal = {}
+            for meal_code in required_meals:
+                first_item = (
+                    dm.items
+                    .filter(meal_time=meal_code, is_common=False)
                     .order_by("order_index", "id")
+                    .first()
                 )
-                items_by_meal[code] = items
+                if first_item:
+                    default_item_by_meal[meal_code] = first_item
 
             for guest in guests_for_diet:
-                any_created = False
+                allowed = allowed_meals_for_guest_on_date(guest, target_date)
 
-                for meal_code, _label in MEAL_CHOICES:
-                    items = items_by_meal.get(meal_code) or []
-                    if not items:
+                any_created = False
+                for meal_code in required_meals:
+                    if not allowed.get(meal_code, False):
                         continue
-                    default_item = items[0]
+
+                    default_item = default_item_by_meal.get(meal_code)
+                    if not default_item:
+                        continue
+
+                    # если уже есть выбор (items_count > 0) — не трогаем
+                    if orders_map.get((guest.id, meal_code), 0) > 0:
+                        continue
 
                     order, _ = Order.objects.get_or_create(
                         guest=guest,
@@ -1540,22 +2228,22 @@ def missing_menu_view(request):
                     any_created = True
 
                 if any_created:
-                    filled_guests.add(guest.id)
+                    filled_guest_ids.add(guest.id)
 
-        if filled_guests:
+        if filled_guest_ids:
             messages.success(
                 request,
-                f"Назначено стандартное меню для {len(filled_guests)} отдыхающих на {target_date.strftime('%d.%m.%Y')}.",
+                f"Назначено стандартное меню для {len(filled_guest_ids)} отдыхающих на {target_date.strftime('%d.%m.%Y')}.",
             )
         else:
             messages.warning(
                 request,
-                "Не удалось назначить меню — возможно, на эту дату нет настроенного дневного меню для нужных диет.",
+                "Не удалось назначить меню — возможно, на эту дату нет настроенного дневного меню или нет выборных блюд.",
             )
 
         return redirect(f"{reverse('missing_menu')}?date={target_date.isoformat()}")
 
-    # считаем статистику и подробный список по диетам
+    # статистика и подробный список по диетам
     diet_labels = dict(DIET_TYPE_CHOICES)
     stats = []
     total_missing = 0
@@ -1572,13 +2260,11 @@ def missing_menu_view(request):
                     seat = s
                     break
 
-            entries.append(
-                {
-                    "guest": g,
-                    "table": seat.table.number if seat else None,
-                    "place": seat.place_number if seat else None,
-                }
-            )
+            entries.append({
+                "guest": g,
+                "table": seat.table.number if seat else None,
+                "place": seat.place_number if seat else None,
+            })
 
         entries.sort(
             key=lambda e: (
@@ -1589,14 +2275,12 @@ def missing_menu_view(request):
         )
 
         if entries:
-            stats.append(
-                {
-                    "code": code,
-                    "label": diet_labels.get(code, label),
-                    "count": len(entries),
-                    "entries": entries,
-                }
-            )
+            stats.append({
+                "code": code,
+                "label": diet_labels.get(code, label),
+                "count": len(entries),
+                "entries": entries,
+            })
             total_missing += len(entries)
 
     return render(request, "dining/missing_menu.html", {
@@ -1604,6 +2288,8 @@ def missing_menu_view(request):
         "total_missing": total_missing,
         "stats": stats,
     })
+
+
 def guest_logout_view(request):
     request.session.pop("guest_id", None)
     return redirect("landing")
@@ -1810,7 +2496,203 @@ def guest_meals_edit_view(request, guest_id: int):
     })
 
 @login_required
+def guest_departure_edit_view(request, guest_id: int):
+    """
+    Изменение даты выезда для отдыхающего.
+    Работает аналогично guest_meals_edit_view: есть параметр next для возврата.
+    """
+    guest = get_object_or_404(Guest, id=guest_id)
+    next_url = request.GET.get("next") or request.POST.get("next") or ""
+
+    if request.method == "POST":
+        form = GuestDepartureForm(request.POST, instance=guest)
+        if form.is_valid():
+            form.save()
+            messages.success(
+                request,
+                f"Дата выезда для «{guest.full_name}» изменена на {guest.end_date:%d.%m.%Y}."
+            )
+
+            if next_url and url_has_allowed_host_and_scheme(
+                next_url, allowed_hosts={request.get_host()}
+            ):
+                return redirect(next_url)
+
+            return redirect("guest_list")
+    else:
+        form = GuestDepartureForm(instance=guest)
+
+    return render(
+        request,
+        "dining/guest_departure_edit.html",
+        {
+            "guest": guest,
+            "form": form,
+            "next": next_url,
+        },
+    )
+
+@login_required
 def guest_list_view(request):
+    """
+    Список отдыхающих с поиском по ФИО.
+    Показываем активных на выбранную дату (по умолчанию сегодня).
+    """
+    cleanup_departed_guests()
+
+    # дата просмотра
+    date_str = request.GET.get("date")
+    if date_str:
+        try:
+            target_date = date.fromisoformat(date_str)
+        except ValueError:
+            target_date = date.today()
+    else:
+        target_date = date.today()
+
+    q = (request.GET.get("q") or "").strip()
+
+    guests_qs = Guest.objects.filter(
+        start_date__lte=target_date,
+        end_date__gte=target_date,
+    )
+
+    if q:
+        q_clean = q.lower()
+        guests_qs = guests_qs.filter(
+            Q(full_name__contains=q_clean) |
+            Q(full_name__contains=q_clean.capitalize()) |
+            Q(full_name__contains=q_clean.upper())
+        )
+
+    guests_qs = guests_qs.order_by("full_name")
+
+    seats = (
+        SeatAssignment.objects
+        .filter(start_date__lte=target_date, end_date__gte=target_date)
+        .select_related("table", "guest")
+    )
+    seat_by_guest_id = {s.guest_id: s for s in seats}
+
+    guests = []
+    for g in guests_qs:
+        s = seat_by_guest_id.get(g.id)
+        guests.append({
+            "guest": g,
+            "table": s.table.number if s else None,
+            "place": s.place_number if s else None,
+        })
+
+    return render(request, "dining/guest_list.html", {
+        "target_date": target_date,
+        "q": q,
+        "guests": guests,
+        "count": len(guests),
+    })
+    """
+    Список отдыхающих с поиском по ФИО.
+    Показываем активных на выбранную дату (по умолчанию сегодня).
+    Диетсестра может менять дату выезда прямо в таблице.
+    """
+    cleanup_departed_guests()
+
+    # --- POST: изменение даты выезда ---
+    if request.method == "POST":
+        guest_id = request.POST.get("guest_id")
+        new_date_str = request.POST.get("new_end_date") or ""
+        orig_date_str = request.POST.get("orig_date") or ""
+        orig_q = request.POST.get("orig_q") or ""
+
+        if guest_id and new_date_str:
+            try:
+                g = Guest.objects.get(id=int(guest_id))
+            except (Guest.DoesNotExist, ValueError):
+                messages.error(request, "Не удалось найти отдыхающего.")
+            else:
+                try:
+                    new_end = date.fromisoformat(new_date_str)
+                except ValueError:
+                    messages.error(request, "Некорректная дата выезда.")
+                else:
+                    if new_end < g.start_date:
+                        messages.error(
+                            request,
+                            f"Дата выезда не может быть раньше даты заезда ({g.start_date:%d.%m.%Y})."
+                        )
+                    else:
+                        g.end_date = new_end
+                        g.save(update_fields=["end_date"])
+                        messages.success(
+                            request,
+                            f"Дата выезда для «{g.full_name}» изменена на {new_end:%d.%m.%Y}."
+                        )
+
+        # Возвращаемся на список с исходными фильтрами (date, q)
+        params = {}
+        if orig_date_str:
+            params["date"] = orig_date_str
+        if orig_q:
+            params["q"] = orig_q
+
+        url = reverse("guest_list")
+        if params:
+            url += "?" + urlencode(params)
+
+        return redirect(url)
+
+    # --- GET: отображение списка ---
+
+    # дата просмотра
+    date_str = request.GET.get("date")
+    if date_str:
+        try:
+            target_date = date.fromisoformat(date_str)
+        except ValueError:
+            target_date = date.today()
+    else:
+        target_date = date.today()
+
+    q = (request.GET.get("q") or "").strip()
+
+    guests_qs = Guest.objects.filter(
+        start_date__lte=target_date,
+        end_date__gte=target_date,
+    )
+
+    if q:
+        # Для корректного поиска кириллицы в SQLite без учета регистра
+        q_clean = q.lower()
+        guests_qs = guests_qs.filter(
+            Q(full_name__contains=q_clean) |
+            Q(full_name__contains=q_clean.capitalize()) |
+            Q(full_name__contains=q_clean.upper())
+        )
+
+    guests_qs = guests_qs.order_by("full_name")
+
+    # посадки на эту дату (чтобы показать стол/место)
+    seats = (
+        SeatAssignment.objects
+        .filter(start_date__lte=target_date, end_date__gte=target_date)
+        .select_related("table", "guest")
+    )
+    seat_by_guest_id = {s.guest_id: s for s in seats}
+
+    guests = []
+    for g in guests_qs:
+        s = seat_by_guest_id.get(g.id)
+        guests.append({
+            "guest": g,
+            "table": s.table.number if s else None,
+            "place": s.place_number if s else None,
+        })
+
+    return render(request, "dining/guest_list.html", {
+        "target_date": target_date,
+        "q": q,
+        "guests": guests,
+        "count": len(guests),
+    })
     """
     Список отдыхающих с поиском по ФИО.
     Показываем активных на выбранную дату (по умолчанию сегодня).

@@ -38,12 +38,14 @@ class AddGuestForm(forms.Form):
         return cleaned
 
 
+
 class DishForm(forms.ModelForm):
     class Meta:
         model = Dish
-        fields = ["name", "is_diet", "proteins", "fats", "carbs", "kcal", "output"]
+        fields = ["name", "short_name", "is_diet", "proteins", "fats", "carbs", "kcal", "output"]
         labels = {
-            "name": "Название",
+            "name": "Полное название (для гостей)",
+            "short_name": "Короткое название (для персонала)",
             "is_diet": "Диетическое блюдо",
             "proteins": "Белки, г",
             "fats": "Жиры, г",
@@ -139,3 +141,28 @@ class GuestMealsForm(forms.ModelForm):
             "departure_lunch": forms.CheckboxInput(),
             "departure_dinner": forms.CheckboxInput(),
         }
+    
+class GuestDepartureForm(forms.ModelForm):
+    """Форма для изменения даты выезда гостя."""
+
+    class Meta:
+        model = Guest
+        fields = ["end_date"]
+        labels = {
+            "end_date": "Дата выезда",
+        }
+        widgets = {
+            "end_date": forms.DateInput(
+                attrs={"class": "js-datepicker"},
+                format="%Y-%m-%d",
+            ),
+        }
+
+    def clean_end_date(self):
+        end = self.cleaned_data["end_date"]
+        start = self.instance.start_date
+        if end < start:
+            raise forms.ValidationError(
+                "Дата выезда не может быть раньше даты заезда."
+            )
+        return end

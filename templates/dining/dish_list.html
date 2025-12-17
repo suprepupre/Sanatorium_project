@@ -7,6 +7,22 @@
 <p><a href="{% url 'diet_home' %}" class="btn-link">← В кабинет диетсестры</a></p>
 <p><a href="{% url 'dish_add' %}" class="btn-link">Добавить блюдо</a></p>
 
+<form method="get" class="staff-form" style="max-width: 600px; margin-top: 10px; margin-bottom: 15px;">
+  <p>
+    <label>Поиск по названию блюда:</label>
+    <input type="text"
+           name="q"
+           value="{{ q }}"
+           placeholder="Например: кнели, борщ, компот">
+  </p>
+  <button type="submit">Найти</button>
+  {% if q %}
+    <span style="margin-left:10px; font-size:14px;">
+      Найдено: {{ count }}
+    </span>
+  {% endif %}
+</form>
+
 <table class="dish-table">
     <tr>
         <th>Название</th>
@@ -27,7 +43,11 @@
         <td>{{ dish.carbs }}</td>
         <td>{{ dish.kcal }}</td>
         <td>{{ dish.output }}</td>
-        <td><a href="{% url 'dish_edit' dish.id %}">Редактировать</a></td>
+        <td>
+          <a href="{% url 'dish_edit' dish.id %}">Редактировать</a>
+          &nbsp;|&nbsp;
+          <a href="{% url 'dish_delete' dish.id %}">Удалить</a>
+        </td>
     </tr>
     {% empty %}
     <tr><td colspan="8">Блюд пока нет.</td></tr>

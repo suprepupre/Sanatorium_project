@@ -2,107 +2,151 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Раздача — по блюдам</title>
-  <style>
-    body { font-family: sans-serif; font-size: 14px; margin: 10px; font-weight: bold; }
-    h1 { font-size: 20px; margin: 0 0 6px 0; }
-    h2 { font-size: 16px; margin: 12px 0 6px; }
-    .muted { font-weight: normal; }
+  <title>Раздача блюд</title>
+    <style>
+    /* Общий размер шрифта — немного больше, но всё ещё компактно */
+    body {
+        font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-size: 11px;      /* было 11px */
+        margin: 5px;          /* было 5x (ошибка) */
+        color: #000;
+    }
+    h1 {
+        font-size: 16px;      /* было 16px */
+        margin: 0 0 4px 0;
+    }
+    h2 {
+        font-size: 15px;      /* было 13px */
+        margin: 10px 0 2px 0;
+    }
+    .muted {
+        font-size: 12px;      /* было 11px */
+        margin-bottom: 1px;
+    }
 
-    table { border-collapse: collapse; width: 100%; table-layout: fixed; margin-bottom: 8px; }
-    th, td { border: 2px solid #000; padding: 3px 5px; font-size: 14px; }
-    th { text-align: center; }
-    
-    td:nth-child(2) { text-align: center; }          /* Кол-во по центру */
-    td:nth-child(3) { line-height: 1.2; }            /* Столы чуть плотнее */
-    td:nth-child(3) { white-space: normal; word-break: break-word; }
+    /* Таблица максимально плотная */
+    table.waiter-table {
+        border-collapse: collapse;
+        width: 100%;
+        table-layout: fixed;
+        margin-bottom: 1px; 
+        border: 2px solid #000;
+    }
 
-    @media print { .no-print { display: none; } }
 
-    .top-panel-inner { display:flex; align-items:center; justify-content:space-between; gap:10px; }
-    .top-form { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-    .top-form label { font-size: 14px; }
-    .top-form input, .top-form select { font-size: 14px; padding: 2px 4px; font-weight: normal; }
-    .top-form button { font-size: 14px; padding: 4px 10px; border:1px solid #000; background:#e0e0ff; cursor:pointer; font-weight:bold; }
-    .btn-link { display:inline-block; padding:4px 10px; background:#2d7ff9; color:#fff; text-decoration:none; border-radius:4px; font-size:14px; }
-    /* чтобы фон печатался (обычно помогает) */
+    /* Строка‑разделитель категории (без текста) */
+    tr.category-row td {
+        background: #e6e6e6 !important;
+        padding: 0;
+        height: 3px;                 /* тонкая полоска */
+        border-top: 3px solid #000;
+        border-bottom: 2px solid #000;
+    }
+
+    /* Заголовки таблицы — оставляем как есть (можно даже уменьшить) */
+    table.waiter-table thead th {
+        background: #d9d9d9 !important;
+        font-weight: bold;
+        text-align: center;
+        font-size: 12px;      /* ← добавить явно размер для заголовков */
+    }
+
+    /* Общее правило для ячеек — убрать font-size или сделать базовым */
+    table.waiter-table th,
+    table.waiter-table td {
+        border: 2px solid #000;
+        /* font-size: 16px; ← УБРАТЬ эту строку */
+        vertical-align: middle;
+    }
+
+    /* Название блюда — УВЕЛИЧИТЬ */
+    td.dish-cell {
+        font-weight: bold;
+        font-size: 18px;      /* было 13px → стало 18px */
+    }
+
+    /* Колонка количества — УВЕЛИЧИТЬ */
+    td.qty-cell {
+        text-align: center;
+        font-weight: bold;
+        font-size: 18px;      /* было 13px → стало 18px */
+        font-variant-numeric: tabular-nums;
+        padding: 0 1px;
+    }
+
+    /* Столы (места) — УВЕЛИЧИТЬ */
+    td.tables-cell {
+        font-size: 18px;      /* было 13px → стало 18px */
+        line-height: 1.15;
+        word-break: break-word;
+    }
+
+    /* Номер стола в рамке — УВЕЛИЧИТЬ */
+    .tbl-num {
+        display: inline-block;
+        font-weight: 900;
+        border: 1px solid #000;
+        padding: 0 2px;
+        margin: 0 1px 0 0;
+        border-radius: 2px;
+        background: #fff;
+        font-size: 16px;      /* было 12px → стало 16px */
+    }
+
+    /* Панель управления (не печатается) */
+    .top-panel {
+        background: #eef2ff;
+        padding: 8px 10px;
+        border-radius: 6px;
+        margin-bottom: 10px;
+        border: 1px solid #ccc;
+    }
+    .top-form {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+        font-size: 13px;      /* было 11px */
+    }
+    .top-form label {
+        font-weight: bold;
+    }
+    .top-form input,
+    .top-form select {
+        padding: 2px 4px;
+        font-size: 13px;      /* было 11px */
+    }
+    .btn {
+        padding: 3px 8px;
+        background: #2d7ff9;
+        color: #fff;
+        text-decoration: none;
+        border-radius: 3px;
+        border: none;
+        cursor: pointer;
+        font-size: 13px;      /* было 11px */
+    }
+    .btn:hover { background: #1f66cc; }
+
     @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    }
-
-    /* зебра только для строк с данными (не шапка) */
-    table.waiter-table th {
-      background: #bfb5b5;
-    }
-
-    table.waiter-table tr:nth-child(n+2):nth-child(odd) td {
-      background: #f3f0f0;   /* светлее */
-    }
-
-    table.waiter-table tr:nth-child(n+2):nth-child(even) td {
-      background: #d9d2d2;   /* темнее */
-    }
-
-    /* колонка "Столы (места)" */
-    td.tables-cell{
-      line-height: 1.25;
-      white-space: normal;
-      word-break: break-word;
-    }
-
-    /* выделение номера стола */
-    .tbl-num{
-      display: inline-block;
-      font-weight: 900;
-      font-size: 18px;      /* было слишком крупно */
-      line-height: 1;
-      background: #fff;
-      border: 1px solid #000;  /* тоньше */
-      padding: 0 4px;          /* меньше */
-      border-radius: 3px;
-      margin-right: 2px;
-      }
-    /* чуть плотнее таблица в целом */
-    .waiter-table th, .waiter-table td {
-      padding: 2px 4px;      /* было крупнее */
-      font-size: 13px;       /* можно оставить 14, но так компактнее */
-      vertical-align: top;
-    }
-
-    /* Кол-во: меньше и уже */
-    .waiter-table th:nth-child(2),
-    .waiter-table td:nth-child(2),
-    .waiter-table td.qty {
-      text-align: center;
-      padding: 1px 2px;      /* сильнее ужимаем */
-      font-size: 12px;       /* меньше шрифт */
-      font-weight: 900;      /* чтобы всё равно читалось */
-      font-variant-numeric: tabular-nums;
-    }
-
-    /* Столы (места): плотнее и лучше переносы */
-    .waiter-table td.tables-cell {
-      font-size: 18px;       /* чуть меньше, чем в “Блюдо” */
-      line-height: 1.15;
-      white-space: normal;
-      word-break: break-word;
+        .no-print { display: none; }
+        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
   </style>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ru.js"></script>
+
+  <!-- flatpickr -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/ru.js"></script>
 </head>
 <body>
 
-<div class="no-print">
-  <div class="top-panel-inner">
+<div class="no-print top-panel">
     <form method="get" class="top-form">
       <label>
         Дата:
-        <span style="display:inline-flex; align-items:center; gap:8px;">
-          <input type="text" class="js-datepicker" name="date" value="{{ selected_date|date:'Y-m-d' }}">
-          <span>({{ selected_date|date:"l" }})</span>
-        </span>
+        <input type="text" class="js-datepicker" name="date"
+               value="{{ selected_date|date:'Y-m-d' }}" style="width:95px;">
       </label>
 
       <label>
@@ -111,36 +155,35 @@
           <option value="">(все)</option>
           {% for num, r in waiter_ranges.items %}
             <option value="{{ num }}" {% if waiter_num == num %}selected{% endif %}>
-              №{{ num }} (столы {{ r.0 }}–{{ r.1 }})
+              №{{ num }} ({{ r.0 }}–{{ r.1 }})
             </option>
           {% endfor %}
         </select>
       </label>
 
       <label>
-        Столы с:
-        <input type="number" name="table_from" min="1" max="100" value="{{ table_from }}" style="width:60px;">
-      </label>
-      <label>
-        по:
-        <input type="number" name="table_to" min="1" max="100" value="{{ table_to }}" style="width:60px;">
+        Столы:
+        <input type="number" name="table_from" min="1" max="100"
+               value="{{ table_from }}" style="width:45px;">
+        –
+        <input type="number" name="table_to" min="1" max="100"
+               value="{{ table_to }}" style="width:45px;">
       </label>
 
-      <button type="submit">Показать</button>
-      <a href="#" onclick="window.print(); return false;" class="btn-link">Распечатать</a>
+      <button type="submit" class="btn">Показать</button>
+      <button type="button" class="btn" onclick="window.print();" style="background:#444;">Печать</button>
+      <a href="{% url 'diet_home' %}" class="btn" style="background:#888;">← Выход</a>
     </form>
-
-    <a href="{% url 'diet_home' %}" class="btn-link">← В кабинет диетсестры</a>
-  </div>
-  <hr>
 </div>
 
 <h1>Раздача блюд (по блюдам)</h1>
-<p class="muted">
-  Дата: {{ selected_date|date:"d.m.Y" }} ({{ selected_date|date:"l" }})
-  {% if waiter_num %}&nbsp;&nbsp; Официант №{{ waiter_num }}{% endif %}
-  &nbsp;&nbsp; Столы: {{ table_from }}–{{ table_to }}
-</p>
+<div class="muted">
+  Дата: {{ selected_date|date:"d.m.Y" }} ({{ selected_date|date:"l" }})&nbsp;&nbsp;
+  Столы: {{ table_from }}–{{ table_to }}
+  {% if waiter_num %}
+    &nbsp;&nbsp;Официант №{{ waiter_num }}
+  {% endif %}
+</div>
 
 {% if not meal_blocks %}
   <p>На выбранную дату заказов нет.</p>
@@ -148,67 +191,66 @@
 
 {% for meal in meal_blocks %}
   <h2>{{ meal.meal_label }}</h2>
+
   <table class="waiter-table">
     <colgroup>
-      <col style="width:32%;">
-      <col style="width:6%;">
-      <col style="width:62%;">
+      <col style="width: 38%;">  <!-- Блюдо -->
+      <col style="width: 3%;">   <!-- Кол-во (узкая) -->
+      <col style="width: 59%;">  <!-- Столы -->
     </colgroup>
-    <tr>
-      <th>Блюдо</th>
-      <th>Кол-во</th>
-      <th>Столы (места)</th>
-    </tr>
-    {% for r in meal.rows %}
-    <tr>
-      <td>{{ r.dish_name }}</td>
-      <td class="qty">{{ r.total }}</td>
-      <td class="tables-cell">{{ r.tables_str }}</td>
-    </tr>
-    {% endfor %}
+    <thead>
+      <tr>
+        <th>Блюдо</th>
+        <th>Кол-во</th>
+        <th>Столы (места)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for category in meal.categories %}
+        <!-- Строка‑полоска, которая визуально отделяет тип блюд.
+             Текст категории не показываем. -->
+        <tr class="category-row">
+          <td colspan="3">&nbsp;</td>
+        </tr>
+
+        {% for row in category.rows %}
+        <tr>
+          <td class="dish-cell">{{ row.dish_name }}</td>
+          <td class="qty-cell">{{ row.total }}</td>
+          <td class="tables-cell">{{ row.tables_str }}</td>
+        </tr>
+        {% endfor %}
+      {% endfor %}
+    </tbody>
   </table>
 {% endfor %}
+
 <script>
 (function () {
-  if (!window.flatpickr) return;
-  flatpickr.localize(flatpickr.l10ns.ru);
+  // flatpickr
+  if (window.flatpickr) {
+      flatpickr.localize(flatpickr.l10ns.ru);
+      document.querySelectorAll('input.js-datepicker').forEach(function (el) {
+        flatpickr(el, {
+          altInput: true,
+          altFormat: "d.m.Y",
+          dateFormat: "Y-m-d",
+          allowInput: true
+        });
+      });
+  }
 
-  document.querySelectorAll('input.js-datepicker').forEach(function (el) {
-    var form = el.closest('form');  // берём форму, в которой находится поле даты
-
-    flatpickr(el, {
-      altInput: true,
-      altFormat: "d.m.Y",   // показываем дд.мм.гггг
-      dateFormat: "Y-m-d",  // отправляем YYYY-MM-DD
-      allowInput: true,
-      onChange: function () {
-        if (form) {
-          form.submit();    // сразу отправляем форму (как будто нажали "Показать")
-        }
-      }
-    });
-  });
-})();
-(function () {
-  // Оборачиваем "73(" или "1–10(" в <span class="tbl-num">...</span>(
-  // Формат строки не меняем, только визуально выделяем.
+  // оформление номеров столов: 10(1,2); 11(3) -> <span class="tbl-num">10</span>(1,2); ...
   document.querySelectorAll('td.tables-cell').forEach(function (td) {
-    if (td.querySelector('.tbl-num')) return; // защита от повторной обработки
-
     const txt = td.textContent || "";
-
-    // 1) добавим точки переноса после ";" чтобы строка лучше переносилась
-    // 2) увеличим номера столов (цифры перед скобкой)
-    let html = txt.replace(/;\s*/g, ';<wbr> ');
-
-    // число или диапазон (с дефисом/длинным тире) перед "("
-    html = html.replace(/(\d+(?:[–-]\d+)?)\s*\(/g, function (_, m) {
+    let html = txt.replace(/(\d+)\s*\(/g, function (_, m) {
       return '<span class="tbl-num">' + m + '</span>(';
     });
-
+    html = html.replace(/;\s*/g, '; ');
     td.innerHTML = html;
   });
 })();
 </script>
+
 </body>
 </html>

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Дата выезда{% endblock %}
+
+{% block content %}
+<h2>Изменение даты выезда</h2>
+
+<p>
+  {% if next %}
+    <a href="{{ next }}" class="btn-link">← Назад</a>
+  {% else %}
+    <a href="{% url 'guest_list' %}" class="btn-link">← К списку отдыхающих</a>
+  {% endif %}
+  &nbsp;
+  <a href="{% url 'diet_home' %}" class="btn-link">В кабинет диетсестры</a>
+</p>
+
+<div class="panel" style="max-width: 520px;">
+  <p><strong>ФИО:</strong> {{ guest.full_name }}</p>
+  <p><strong>Диета:</strong> {{ guest.get_diet_kind_display }}</p>
+  <p><strong>Дата заезда:</strong> {{ guest.start_date|date:"d.m.Y" }}</p>
+
+  <form method="post" class="staff-form">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+
+    {{ form.non_field_errors }}
+
+    <p>
+      {{ form.end_date.label_tag }}
+      {{ form.end_date }}
+      {{ form.end_date.errors }}
+    </p>
+
+    <button type="submit" class="btn-primary" style="font-size:18px; padding:8px 18px; min-width:auto;">
+      Сохранить
+    </button>
+  </form>
+</div>
+{% endblock %}

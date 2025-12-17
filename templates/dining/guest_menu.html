@@ -5,6 +5,12 @@
 <div class="panel">
     <h2>Здравствуйте, {{ guest.full_name }}</h2>
 
+    {% if form_error %}
+        <p class="error">
+            {{ form_error }}
+        </p>
+    {% endif %}
+
     {% if seat %}
         <p>Ваш стол: №{{ seat.table.number }}, место {{ seat.place_number }}</p>
     {% endif %}
@@ -75,65 +81,67 @@
                 {% csrf_token %}
 
                 {% for meal in meal_blocks %}
-                    <div class="category-block">
-                        <h3>
-                            {{ meal.label }}
-                            {% if meal.time %}
-                                ({{ meal.time }})
-                            {% endif %}
-                        </h3>
+            <div class="category-block">
+                <h3>
+                    {{ meal.label }}
+                    {% if meal.time %}
+                        ({{ meal.time }})
+                    {% endif %}
+                </h3>
 
-                        {# Сначала – выборные блюда с нумерацией #}
-                        {% for cat in meal.categories %}
-                            {% if cat.category %}
-                                <h4>{{ cat.category }}</h4>
-                            {% endif %}
+                {# Сначала – выборные блюда с нумерацией #}
+                {% for cat in meal.categories %}
+                    {% if cat.has_choices %}
+                        {% if cat.category %}
+                            <h4>{{ cat.category }}</h4>
+                        {% endif %}
 
-                            {% for item in cat.items %}
-                                {% if not item.is_common %}
-                                    <label class="option-large">
-                                        <input type="radio"
-                                               name="{{ cat.key }}"
-                                               value="{{ item.id }}"
-                                               {% if cat.selected_id == item.id %}checked{% endif %}
-                                               {% if not can_edit %}disabled{% endif %}>
+                        {% for item in cat.items %}
+                            {% if not item.is_common %}
+                                <label class="option-large">
+                                    <input type="radio"
+                                           name="{{ cat.key }}"
+                                           value="{{ item.id }}"
+                                           {% if cat.selected_id == item.id %}checked{% endif %}
+                                           {% if not can_edit %}disabled{% endif %}>
 
-                                        {{ forloop.counter }}. {{ item.dish.name }}
+                                    {{ forloop.counter }}. {{ item.dish.name }}
 
-                                        {% if item.dish.proteins or item.dish.fats or item.dish.carbs or item.dish.kcal or item.dish.output %}
-                                            <span class="muted" style="font-size: 18px;">
-                                                {% if item.dish.proteins or item.dish.fats or item.dish.carbs or item.dish.kcal %}
-                                                    (Б: {{ item.dish.proteins }} Ж: {{ item.dish.fats }}
-                                                     У: {{ item.dish.carbs }} Ккал: {{ item.dish.kcal }}
-                                                {% else %}
-                                                    (
-                                                {% endif %}
-                                                {% if item.dish.output %}
-                                                    ; Выход: {{ item.dish.output }} г
-                                                {% endif %}
-                                                )
-                                            </span>
-                                        {% endif %}
-                                    </label>
-                                {% endif %}
-                            {% endfor %}
-                        {% endfor %}
-
-                        {# Затем – общие блюда (без выбора и без номеров) #}
-                        {% for cat in meal.categories %}
-                            {% for item in cat.items %}
-                                {% if item.is_common %}
-                                    <div class="option-large" style="background:#f9f9f9;">
-                                        {{ item.dish.name }}
+                                    {% if item.dish.proteins or item.dish.fats or item.dish.carbs or item.dish.kcal or item.dish.output %}
                                         <span class="muted" style="font-size: 18px;">
-                                            (выдаётся всем)
+                                            {% if item.dish.proteins or item.dish.fats or item.dish.carbs or item.dish.kcal %}
+                                                (Б: {{ item.dish.proteins }} Ж: {{ item.dish.fats }}
+                                                 У: {{ item.dish.carbs }} Ккал: {{ item.dish.kcal }}
+                                            {% else %}
+                                                (
+                                            {% endif %}
+                                            {% if item.dish.output %}
+                                                ; Выход: {{ item.dish.output }} г
+                                            {% endif %}
+                                            )
                                         </span>
-                                    </div>
-                                {% endif %}
-                            {% endfor %}
+                                    {% endif %}
+                                </label>
+                            {% endif %}
                         {% endfor %}
-                    </div>
+                    {% endif %}
                 {% endfor %}
+
+                {# Затем – общие блюда (без выбора и без номеров) #}
+                {% for cat in meal.categories %}
+                    {% for item in cat.items %}
+                        {% if item.is_common %}
+                            <div class="option-large" style="background:#f9f9f9;">
+                                {{ item.dish.name }}
+                                <span class="muted" style="font-size: 18px;">
+                                    (выдаётся всем)
+                                </span>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                {% endfor %}
+            </div>
+        {% endfor %}
 
                 {% if can_edit %}
                     <button type="submit" class="btn-primary">

@@ -8,6 +8,12 @@
   <a href="{% url 'diet_home' %}" class="btn-link">← В кабинет диетсестры</a>
 </p>
 
+{% if messages %}
+  {% for message in messages %}
+    <p style="color: green;"><strong>{{ message }}</strong></p>
+  {% endfor %}
+{% endif %}
+
 <form method="get" class="staff-form" style="max-width: 700px; margin-bottom: 15px;">
   <p>
     <label>Дата:</label>
@@ -33,7 +39,7 @@
     <th>Диета</th>
     <th>Стол</th>
     <th>Место</th>
-    <th>До</th>
+    <th>Дата выезда</th>
     <th>Код</th>
     <th></th>
   </tr>
@@ -48,13 +54,19 @@
     <td style="text-align:center;">{{ row.guest.access_code }}</td>
     <td style="text-align:center; white-space:nowrap;">
       <a class="btn-link"
-        href="{% url 'move_guest' row.guest.id %}?date={{ target_date|date:'Y-m-d' }}">
+         href="{% url 'guest_departure_edit' row.guest.id %}?next={{ request.get_full_path|urlencode }}">
+        Дата выезда
+      </a>
+
+      <a class="btn-link"
+         style="margin-left:6px;"
+         href="{% url 'move_guest' row.guest.id %}?date={{ target_date|date:'Y-m-d' }}">
         Пересадить
       </a>
 
       <a class="btn-link"
-        style="margin-left:6px;"
-        href="{% url 'guest_meals_edit' row.guest.id %}?next={{ request.get_full_path|urlencode }}">
+         style="margin-left:6px;"
+         href="{% url 'guest_meals_edit' row.guest.id %}?next={{ request.get_full_path|urlencode }}">
         Приёмы пищи
       </a>
     </td>

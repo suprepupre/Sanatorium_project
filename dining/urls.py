@@ -16,14 +16,14 @@ urlpatterns = [
     path("diet/menu-settings/", views.menu_settings_view, name="menu_settings"),
     path("diet/guests/", views.guest_list_view, name="guest_list"),
     path("diet/guests/<int:guest_id>/meals/", views.guest_meals_edit_view, name="guest_meals_edit"),
-
-
+    path("diet/guests/<int:guest_id>/departure/", views.guest_departure_edit_view, name="guest_departure_edit"),
+    
 
     # Справочник блюд
     path("dishes/", views.dish_list_view, name="dish_list"),
     path("dishes/add/", views.dish_create_view, name="dish_add"),
     path("dishes/<int:dish_id>/edit/", views.dish_edit_view, name="dish_edit"),
-
+    path("dishes/<int:dish_id>/delete/", views.dish_delete_view, name="dish_delete"),    
 
     # Меню
     path("menus/select/", views.daily_menu_select_view, name="daily_menu_select"),
